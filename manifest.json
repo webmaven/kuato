@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Kuato",
+  "version": "1.0",
+  "description": "QOL enhancements for Nomi.ai.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "https://fars.ee/*",
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://beta.nomi.ai/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
