@@ -5,6 +5,19 @@
  * the book library and send text chunks.
  */
 
+// --- Configuration ---
+
+/**
+ * @description CSS selectors for the Nomi.ai UI elements.
+ * These are prone to changing, so they're centralized here for easy maintenance.
+ */
+const nomiSelectors = {
+  chatInput: 'textarea.css-nsfc0d',
+  sendButton: 'button.css-8shs3e',
+  chatLog: 'div[role="log"].css-13ow6bz',
+  nomiMessage: 'div[type="Nomi"]'
+};
+
 // --- Global State ---
 
 /** @type {object|null} - Holds the book object currently selected by the user. */
@@ -23,7 +36,7 @@ function createKuatoPanel() {
   panel.id = 'kuato-panel';
 
   panel.innerHTML = `
-    <h3>Kuato Library</h3>
+    <h3>"Open your mind..." - Kuato</h3>
     
     <div class="kuato-section">
       <label for="kuato-library-select">Select Book:</label>
@@ -148,10 +161,17 @@ function sendChunk(chunk) {
     chrome.runtime.sendMessage({ action: 'uploadToPastebin', content: fullContent }, (response) => {
         if (response && response.success) {
             const message = `(Kuato) Here is part ${chunk.chunkIndex + 1} of ${currentBook.chunks.length} of "${currentBook.title}": ${response.url}`;
-            const chatInput = document.querySelector('textarea.css-nsfc0d');
-            const sendButton = document.querySelector('button.css-8shs3e');
+            const chatInput = document.querySelector(nomiSelectors.chatInput);
+            const sendButton = document.querySelector(nomiSelectors.sendButton);
 
-            if (chatInput && sendButton && !sendButton.disabled) {
+            if (chatInput && sendButton) {
+                if (sendButton.disabled) {
+                    alert("Kuato: Cannot send message. The Nomi send button is currently disabled.");
+                    sendNextButton.disabled = false;
+                    sendNextButton.textContent = 'Send Next Chapter';
+                    return;
+                }
+
                 chatInput.value = message;
                 chatInput.dispatchEvent(new Event('input', { bubbles: true }));
                 sendButton.click();
@@ -168,6 +188,7 @@ function sendChunk(chunk) {
                 });
 
             } else {
+                alert("Kuato: Could not find the chat input or send button. The extension may be out of date.");
                 sendNextButton.disabled = false;
                 sendNextButton.textContent = 'Send Next Chapter';
             }
@@ -214,12 +235,18 @@ function initializeKuato() {
     loadNewButton.addEventListener('click', () => {
         const url = prompt('Please enter the URL of the book to load:');
         if (url) {
+            loadNewButton.textContent = 'Loading...';
+            loadNewButton.disabled = true;
             chrome.runtime.sendMessage({ action: 'loadUrl', url: url }, (response) => {
+                loadNewButton.textContent = 'Load New Book from URL';
+                loadNewButton.disabled = false;
                 if (response && response.success) {
                     alert(`Book "${response.book.title}" loaded successfully!`);
                     populateLibraryDropdown();
                 } else {
-                    alert('Failed to load book. See console for details.');
+                    const errorMessage = response ? response.error : 'An unknown error occurred.';
+                    alert(`Failed to load book.\n\nReason: ${errorMessage}`);
+                    console.error('Kuato - Failed to load book. Full response:', response);
                 }
             });
         }
@@ -276,13 +303,13 @@ function initializeKuato() {
         pauseButton.style.display = 'none';
     });
 
-    const chatLog = document.querySelector('div[role="log"].css-13ow6bz');
+    const chatLog = document.querySelector(nomiSelectors.chatLog);
     if (chatLog) {
         const observer = new MutationObserver((mutationsList) => {
             for(const mutation of mutationsList) {
                 if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
                     mutation.addedNodes.forEach(node => {
-                        if (node.querySelector && node.querySelector('div[type="Nomi"]')) {
+                        if (node.querySelector && node.querySelector(nomiSelectors.nomiMessage)) {
                             document.getElementById('kuato-send-next').disabled = false;
                             document.getElementById('kuato-send-next').textContent = 'Send Next Chapter';
                             if (isSendingAll) {
@@ -294,7 +321,14 @@ function initializeKuato() {
             }
         });
         observer.observe(chatLog, { childList: true, subtree: true });
+    } else {
+        // If the chat log isn't found, it's a critical failure.
+        // The selectors might be outdated.
+        alert("Kuato critical error: Could not find Nomi chat elements. The extension may be out of date. Please check for updates.");
     }
 }
 
-initializeKuato();
+// --- Self-Executing Initialization ---
+
+// A brief delay to ensure the Nomi page has finished rendering its UI.
+setTimeout(initializeKuato, 2000);
