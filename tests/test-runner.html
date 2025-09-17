@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Kuato Extension Tests</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        h1, h2 { border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        .test-case { margin-left: 20px; }
+        .pass { color: green; }
+        .fail { color: red; font-weight: bold; }
+        pre { background-color: #f0f0f0; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Kuato Extension Test Suite</h1>
+    <div id="results"></div>
+
+    <!-- Load Scripts -->
+    <!-- 1. Dependencies for the script being tested -->
+    <script src="../lib/Readability.js"></script>
+
+    <!-- 2. The test script, which sets up mocks BEFORE the main script runs -->
+    <script src="tests.js"></script>
+
+    <!-- 3. The main background script to be tested -->
+    <script src="../background.js"></script>
+
+    <script>
+        // 4. Run the tests after all scripts have loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            runAllTests();
+        });
+    </script>
+</body>
+</html>
