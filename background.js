@@ -82,14 +82,39 @@ async function updateBook(bookId, updatedData) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'loadUrl') {
         fetch(request.url)
-            .then(response => response.text())
-            .then(html => {
-                const doc = new DOMParser().parseFromString(html, "text/html");
-                const reader = new Readability(doc);
-                const article = reader.parse();
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Network request failed with status ${response.status} - ${response.statusText}`);
+                }
+                const contentType = response.headers.get('content-type');
+                return response.text().then(text => ({
+                    text,
+                    isHtml: contentType && contentType.includes('text/html')
+                }));
+            })
+            .then(data => {
+                let title = 'Untitled';
+                let text = '';
 
-                const title = article.title || 'Untitled';
-                const text = article.textContent;
+                if (data.isHtml) {
+                    const doc = new DOMParser().parseFromString(data.text, "text/html");
+                    const reader = new Readability(doc);
+                    const article = reader.parse();
+
+                    if (!article || !article.textContent) {
+                        // Fallback for HTML pages that Readability can't parse
+                        console.warn('[Kuato] Readability failed on an HTML page. Using document title and raw text.');
+                        title = doc.title || new URL(request.url).pathname.split('/').pop() || 'Untitled';
+                        text = doc.body.textContent || '';
+                    } else {
+                        title = article.title || 'Untitled';
+                        text = article.textContent;
+                    }
+                } else {
+                    // Handle as plain text
+                    title = new URL(request.url).pathname.split('/').pop() || 'Untitled Text';
+                    text = data.text;
+                }
 
                 const chunkSize = 2000;
                 const chunks = [];
@@ -113,7 +138,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 });
             })
             .catch(error => {
-                console.error('Error fetching or processing URL:', error);
+                console.error('[Kuato] A failure occurred during the loadUrl process:', error);
                 sendResponse({ success: false, error: error.message });
             });
 

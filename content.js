@@ -36,7 +36,7 @@ function createKuatoPanel() {
   panel.id = 'kuato-panel';
 
   panel.innerHTML = `
-    <h3>Kuato Library</h3>
+    <h3>"Open your mind..." - Kuato</h3>
     
     <div class="kuato-section">
       <label for="kuato-library-select">Select Book:</label>
@@ -235,12 +235,18 @@ function initializeKuato() {
     loadNewButton.addEventListener('click', () => {
         const url = prompt('Please enter the URL of the book to load:');
         if (url) {
+            loadNewButton.textContent = 'Loading...';
+            loadNewButton.disabled = true;
             chrome.runtime.sendMessage({ action: 'loadUrl', url: url }, (response) => {
+                loadNewButton.textContent = 'Load New Book from URL';
+                loadNewButton.disabled = false;
                 if (response && response.success) {
                     alert(`Book "${response.book.title}" loaded successfully!`);
                     populateLibraryDropdown();
                 } else {
-                    alert('Failed to load book. See console for details.');
+                    const errorMessage = response ? response.error : 'An unknown error occurred.';
+                    alert(`Failed to load book.\n\nReason: ${errorMessage}`);
+                    console.error('Kuato - Failed to load book. Full response:', response);
                 }
             });
         }

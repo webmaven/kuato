@@ -5,6 +5,14 @@
  * To run, open tests/test-runner.html in a browser.
  */
 
+/**
+ * Dummy function to prevent errors when `background.js` is loaded in a non-worker context.
+ * The test harness loads dependencies via <script> tags instead.
+ */
+function importScripts(script) {
+    console.log(`(Test Harness) Mocked importScripts call for: ${script}`);
+}
+
 // --- Mocks and Test Harness ---
 
 // This mock needs to be defined before background.js is loaded.
@@ -201,6 +209,41 @@ function runIntegrationTests() {
             const library = await getLibrary();
             assert(library.length === 1, 'Book should be saved to the library');
             assertDeepEqual(library[0].title, 'Test Article', 'Saved book should have the correct title');
+
+            // Cleanup
+            window.fetch = originalFetch;
+            done();
+        });
+    });
+
+    test('loadUrl message should handle plain text files correctly', async (done) => {
+        // Arrange
+        chrome.storage.local.clear(() => {});
+        const fakeText = "This is a plain text document.\nIt has multiple lines.";
+
+        const originalFetch = window.fetch;
+        window.fetch = async (url) => {
+            return {
+                ok: true,
+                headers: { get: () => 'text/plain' },
+                text: async () => fakeText
+            };
+        };
+
+        const request = {
+            action: 'loadUrl',
+            url: 'https://example.com/file.txt'
+        };
+
+        // Act
+        chrome.runtime._sendMessage(request, {}, async (response) => {
+            // Assert
+            assert(response.success, 'Response should be successful for plain text');
+            assertDeepEqual(response.book.title, 'file.txt', 'Title should be derived from the URL');
+            assertDeepEqual(response.book.chunks[0].content, fakeText, 'Content should be the raw text');
+
+            const library = await getLibrary();
+            assert(library.length === 1, 'Plain text book should be saved to library');
 
             // Cleanup
             window.fetch = originalFetch;
