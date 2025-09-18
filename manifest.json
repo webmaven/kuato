@@ -4,7 +4,8 @@
   "version": "1.0",
   "description": "QOL enhancements for Nomi.ai.",
   "permissions": [
-    "storage"
+    "storage",
+    "offscreen"
   ],
   "background": {
     "service_worker": "background.js"
@@ -16,7 +17,7 @@
   "content_scripts": [
     {
       "matches": ["https://beta.nomi.ai/*"],
-      "js": ["lib/Readability.js", "content.js"]
+      "js": ["content.js"]
     }
   ]
 }
