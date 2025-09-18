@@ -6,11 +6,6 @@
  */
 
 // --- Configuration ---
-
-/**
- * @description CSS selectors for the Nomi.ai UI elements.
- * These are prone to changing, so they're centralized here for easy maintenance.
- */
 const nomiSelectors = {
   chatInput: 'textarea[aria-label="Chat Input"]',
   sendButton: 'button[aria-label="Send message"]',
@@ -19,25 +14,15 @@ const nomiSelectors = {
 };
 
 // --- Global State ---
-
-/** @type {object|null} - Holds the book object currently selected by the user. */
 let currentBook = null;
-/** @type {boolean} - Flag to control the "Send All" auto-sending process. */
 let isSendingAll = false;
 
-
 // --- UI Creation ---
-
-/**
- * Creates the main HTML structure for the Kuato Panel and injects it into the page.
- */
 function createKuatoPanel() {
   const panel = document.createElement('div');
   panel.id = 'kuato-panel';
-
   panel.innerHTML = `
     <h3>"Open your mind..." - Kuato</h3>
-    
     <div class="kuato-section">
       <label for="kuato-library-select">Select Book:</label>
       <div style="display: flex; gap: 5px;">
@@ -47,11 +32,9 @@ function createKuatoPanel() {
         <button id="kuato-rename-book" style="width: auto;">Rename</button>
       </div>
     </div>
-
     <div class="kuato-section">
       <button id="kuato-load-new">Load New Book from URL</button>
     </div>
-
     <div id="kuato-book-info" style="display: none;">
       <hr>
       <h4 id="kuato-book-title"></h4>
@@ -63,13 +46,9 @@ function createKuatoPanel() {
       </div>
     </div>
   `;
-
   document.body.appendChild(panel);
 }
 
-/**
- * Creates a <style> tag and injects the CSS for the Kuato Panel into the page's <head>.
- */
 function addKuatoPanelStyles() {
     const style = document.createElement('style');
     style.textContent = `
@@ -85,12 +64,7 @@ function addKuatoPanelStyles() {
     document.head.appendChild(style);
 }
 
-
 // --- UI Logic and Rendering ---
-
-/**
- * Fetches the library from the background script and populates the book selection dropdown.
- */
 function populateLibraryDropdown() {
     chrome.runtime.sendMessage({ action: 'getLibrary' }, (response) => {
         if (response && response.success) {
@@ -110,22 +84,15 @@ function populateLibraryDropdown() {
     });
 }
 
-/**
- * Renders the details of the currently selected book (`currentBook`) in the panel.
- * Displays the title and the status of each chunk, including a "Retry" button for unsent chunks.
- */
 function renderBookInfo() {
     if (!currentBook) return;
-
     document.getElementById('kuato-book-title').textContent = currentBook.title;
     const chunksStatusDiv = document.getElementById('kuato-chunks-status');
     chunksStatusDiv.innerHTML = '';
-
     currentBook.chunks.forEach(chunk => {
         const chunkDiv = document.createElement('div');
         const status = chunk.status || 'pending';
         chunkDiv.textContent = `Chunk ${chunk.chunkIndex + 1}: ${status}`;
-        
         if (status !== 'sent') {
             const retryButton = document.createElement('button');
             retryButton.textContent = 'Retry';
@@ -136,19 +103,10 @@ function renderBookInfo() {
         }
         chunksStatusDiv.appendChild(chunkDiv);
     });
-
     document.getElementById('kuato-book-info').style.display = 'block';
 }
 
-
 // --- Core Functionality ---
-
-/**
- * Handles the entire process of sending a single text chunk.
- * It uploads the chunk content to a pastebin, formats a message for the Nomi,
- * and injects and sends the message through the Nomi chat interface.
- * @param {object} chunk - The chunk object to send.
- */
 function sendChunk(chunk) {
     if (!chunk || !currentBook) {
         alert('No chunk or book selected.');
@@ -159,11 +117,7 @@ function sendChunk(chunk) {
     sendNextButton.disabled = true;
     sendNextButton.textContent = 'Waiting for Nomi...';
     
-    const fullContent = `This is part ${chunk.chunkIndex + 1} of ${currentBook.chunks.length} of the text "${currentBook.title}".
-
----
-
-${chunk.content}`;
+    const fullContent = `This is part ${chunk.chunkIndex + 1} of ${currentBook.chunks.length} of the text "${currentBook.title}".\n\n---\n\n${chunk.content}`;
 
     chrome.runtime.sendMessage({ action: 'uploadToPastebin', content: fullContent }, (response) => {
         if (response && response.success) {
@@ -172,40 +126,31 @@ ${chunk.content}`;
             const sendButton = document.querySelector(nomiSelectors.sendButton);
 
             if (chatInput && sendButton) {
-                if (sendButton.disabled) {
-                    // This check is a fallback. The event dispatching below should prevent this from being needed.
-                    alert("Kuato: Cannot send message. The Nomi send button is currently disabled.");
-                    sendNextButton.disabled = false;
-                    sendNextButton.textContent = 'Send Next Chapter';
-                    return;
-                }
-                
-                // Use the native setter to bypass React's input handling
                 const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
                 nativeInputValueSetter.call(chatInput, message);
-
-                // Dispatch a series of events to more accurately simulate user input
-                chatInput.dispatchEvent(new Event('keydown', { bubbles: true }));
-                chatInput.dispatchEvent(new Event('keypress', { bubbles: true }));
                 chatInput.dispatchEvent(new Event('input', { bubbles: true }));
-                chatInput.dispatchEvent(new Event('keyup', { bubbles: true }));
                 chatInput.dispatchEvent(new Event('change', { bubbles: true }));
-                
-                sendButton.click();
-                
-                chunk.status = 'sent';
-                currentBook.lastSentChunk = Math.max(currentBook.lastSentChunk, chunk.chunkIndex);
-                
-                chrome.runtime.sendMessage({ 
-                    action: 'updateBook', 
-                    bookId: currentBook.id, 
-                    data: { chunks: currentBook.chunks, lastSentChunk: currentBook.lastSentChunk } 
-                }, () => {
-                    renderBookInfo();
-                });
 
+                setTimeout(() => {
+                    if (sendButton.disabled) {
+                        alert("Kuato Error: Failed to enable the send button. The website might have changed. Please try typing a character into the chat box manually to enable it.");
+                        sendNextButton.disabled = false;
+                        sendNextButton.textContent = 'Send Next Chapter';
+                    } else {
+                        sendButton.click();
+                        chunk.status = 'sent';
+                        currentBook.lastSentChunk = Math.max(currentBook.lastSentChunk, chunk.chunkIndex);
+                        chrome.runtime.sendMessage({ 
+                            action: 'updateBook', 
+                            bookId: currentBook.id, 
+                            data: { chunks: currentBook.chunks, lastSentChunk: currentBook.lastSentChunk } 
+                        }, () => {
+                            renderBookInfo();
+                        });
+                    }
+                }, 100);
             } else {
-                alert("Kuato: Could not find the chat input or send button. The extension may be out of date.");
+                alert("Kuato Error: Could not find the chat input or send button. The extension may be out of date.");
                 sendNextButton.disabled = false;
                 sendNextButton.textContent = 'Send Next Chapter';
             }
@@ -216,10 +161,6 @@ ${chunk.content}`;
     });
 }
 
-/**
- * Sends the next unsent chunk in the sequence for the current book.
- * This is the main function for the "Send All" feature.
- */
 function sendNextChunkInSequence() {
     if (!isSendingAll || !currentBook) {
         isSendingAll = false;
@@ -236,25 +177,17 @@ function sendNextChunkInSequence() {
     }
 }
 
-
 // --- Initialization ---
-
-/**
- * Main function to initialize the Kuato extension on the page.
- * Creates the UI, sets up event listeners, and starts the MutationObserver.
- */
 function initializeKuato() {
-    // --- Diagnostic Check ---
     const missingElements = [];
     for (const key in nomiSelectors) {
         if (!document.querySelector(nomiSelectors[key])) {
             missingElements.push(key);
         }
     }
-
     if (missingElements.length > 0) {
         alert(`Kuato Initialization Error:\nCould not find the following required UI elements on the page: \n\n- ${missingElements.join('\n- ')}\n\nThe extension may be incompatible with the current version of Nomi.ai.`);
-        return; // Stop initialization
+        return;
     }
     
     addKuatoPanelStyles();
@@ -297,9 +230,7 @@ function initializeKuato() {
             }, (response) => {
                 if (response && response.success) {
                     alert('Book renamed successfully.');
-                    // Refresh the dropdown to show the new title
                     populateLibraryDropdown();
-                    // Update the currently selected book data
                     currentBook.title = newTitle.trim();
                     renderBookInfo();
                 } else {
@@ -312,7 +243,6 @@ function initializeKuato() {
     const librarySelect = document.getElementById('kuato-library-select');
     librarySelect.addEventListener('change', () => {
         const bookId = librarySelect.value;
-        const bookInfoDiv = document.getElementById('kuato-book-info');
         if (bookId) {
             chrome.runtime.sendMessage({ action: 'getBook', bookId: bookId }, (response) => {
                 if (response && response.success && response.book) {
@@ -320,12 +250,12 @@ function initializeKuato() {
                     renderBookInfo();
                 } else {
                     currentBook = null;
-                    bookInfoDiv.style.display = 'none';
+                    document.getElementById('kuato-book-info').style.display = 'none';
                 }
             });
         } else {
             currentBook = null;
-            bookInfoDiv.style.display = 'none';
+            document.getElementById('kuato-book-info').style.display = 'none';
         }
     });
 
@@ -380,8 +310,6 @@ function initializeKuato() {
         observer.observe(chatLog, { childList: true, subtree: true });
     }
 }
-
-// --- Self-Executing Initialization ---
 
 // A brief delay to ensure the Nomi page has finished rendering its UI.
 setTimeout(initializeKuato, 2000);
