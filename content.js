@@ -171,7 +171,6 @@ function sendChunk(chunk) {
                     sendNextButton.textContent = 'Send Next Chapter';
                     return;
                 }
-
                 // Use the native setter to bypass React's input handling
                 const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
                 nativeInputValueSetter.call(chatInput, message);
@@ -179,7 +178,6 @@ function sendChunk(chunk) {
                 // Dispatch an event to notify the framework of the change
                 const inputEvent = new Event('input', { bubbles: true });
                 chatInput.dispatchEvent(inputEvent);
-
                 sendButton.click();
                 
                 chunk.status = 'sent';
