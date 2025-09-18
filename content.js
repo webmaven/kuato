@@ -12,8 +12,8 @@
  * These are prone to changing, so they're centralized here for easy maintenance.
  */
 const nomiSelectors = {
-  chatInput: 'textarea.css-nsfc0d',
-  sendButton: 'button.css-8shs3e',
+  chatInput: 'textarea[aria-label="Chat Input"]',
+  sendButton: 'button[aria-label="Send message"]',
   chatLog: 'div[role="log"].css-13ow6bz',
   nomiMessage: 'div[type="Nomi"]'
 };
@@ -156,7 +156,11 @@ function sendChunk(chunk) {
     sendNextButton.disabled = true;
     sendNextButton.textContent = 'Waiting for Nomi...';
     
-    const fullContent = `This is part ${chunk.chunkIndex + 1} of ${currentBook.chunks.length} of the text "${currentBook.title}".\n\n---\n\n${chunk.content}`;
+    const fullContent = `This is part ${chunk.chunkIndex + 1} of ${currentBook.chunks.length} of the text "${currentBook.title}".
+
+---
+
+${chunk.content}`;
 
     chrome.runtime.sendMessage({ action: 'uploadToPastebin', content: fullContent }, (response) => {
         if (response && response.success) {
@@ -231,6 +235,19 @@ function sendNextChunkInSequence() {
  * Creates the UI, sets up event listeners, and starts the MutationObserver.
  */
 function initializeKuato() {
+    // --- Diagnostic Check ---
+    const missingElements = [];
+    for (const key in nomiSelectors) {
+        if (!document.querySelector(nomiSelectors[key])) {
+            missingElements.push(key);
+        }
+    }
+
+    if (missingElements.length > 0) {
+        alert(`Kuato Initialization Error:\nCould not find the following required UI elements on the page: \n\n- ${missingElements.join('\n- ')}\n\nThe extension may be incompatible with the current version of Nomi.ai.`);
+        return; // Stop initialization
+    }
+    
     addKuatoPanelStyles();
     createKuatoPanel();
     populateLibraryDropdown();
@@ -279,7 +296,7 @@ function initializeKuato() {
                 sourceUrl: url
             }, (response) => {
                 if (response && response.success) {
-                    alert(`Book "${response.book.title}" loaded successfully!`);
+                    alert(`Book \"${response.book.title}\" loaded successfully!`);
                     populateLibraryDropdown();
                 } else {
                     const errorMessage = response ? response.error : 'An unknown error occurred.';
@@ -365,10 +382,6 @@ function initializeKuato() {
             }
         });
         observer.observe(chatLog, { childList: true, subtree: true });
-    } else {
-        // If the chat log isn't found, it's a critical failure.
-        // The selectors might be outdated.
-        alert("Kuato critical error: Could not find Nomi chat elements. The extension may be out of date. Please check for updates.");
     }
 }
 
