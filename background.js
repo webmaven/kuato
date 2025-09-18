@@ -1,11 +1,12 @@
 /**
  * @file background.js
  * This script runs in the background of the extension and handles all major logic,
- * including data storage, fetching remote content, and processing text.
+ * including data storage.
  */
 
-// Note: This script depends on Readability.js, which we will need to add
-// to a 'lib' directory in the project.
+// Note: This script no longer directly depends on Readability.js.
+// That logic has been moved to the content script.
+
 // --- Initialization ---
 
 /**
@@ -90,7 +91,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 status: 'pending'
             });
         }
-
+        
         const newBook = {
             title: title,
             sourceUrl: sourceUrl,
@@ -104,10 +105,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.error('[Kuato] Failed to add book:', error);
             sendResponse({ success: false, error: error.message });
         });
-
+        
         return true; // Indicates asynchronous response
     }
-
+    
     if (request.action === 'getLibrary') {
         getLibrary().then(library => {
             sendResponse({ success: true, library: library });
