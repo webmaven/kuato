@@ -3,9 +3,6 @@
   "name": "Kuato",
   "version": "1.0",
   "description": "QOL enhancements for Nomi.ai.",
-  "action": {
-    "default_popup": "popup.html"
-  },
   "permissions": [
     "storage"
   ],
@@ -19,7 +16,7 @@
   "content_scripts": [
     {
       "matches": ["https://beta.nomi.ai/*"],
-      "js": ["content.js"]
+      "js": ["lib/Readability.js", "content.js"]
     }
   ]
 }

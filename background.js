@@ -6,8 +6,6 @@
 
 // Note: This script depends on Readability.js, which we will need to add
 // to a 'lib' directory in the project.
-importScripts('lib/Readability.js');
-
 // --- Initialization ---
 
 /**
@@ -80,45 +78,37 @@ async function updateBook(bookId, updatedData) {
  * Listens for messages from other parts of the extension (like content scripts).
  */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'loadUrl') {
-        fetch(request.url)
-            .then(response => response.text())
-            .then(html => {
-                const doc = new DOMParser().parseFromString(html, "text/html");
-                const reader = new Readability(doc);
-                const article = reader.parse();
+    if (request.action === 'addBookFromText') {
+        const { title, text, sourceUrl } = request;
 
-                const title = article.title || 'Untitled';
-                const text = article.textContent;
-
-                const chunkSize = 2000;
-                const chunks = [];
-                for (let i = 0; i < text.length; i += chunkSize) {
-                    chunks.push({
-                        chunkIndex: chunks.length,
-                        content: text.substring(i, i + chunkSize),
-                        status: 'pending'
-                    });
-                }
-                
-                const newBook = {
-                    title: title,
-                    sourceUrl: request.url,
-                    chunks: chunks,
-                    lastSentChunk: -1
-                };
-
-                addBook(newBook).then(addedBook => {
-                    sendResponse({ success: true, book: addedBook });
-                });
-            })
-            .catch(error => {
-                console.error('Error fetching or processing URL:', error);
-                sendResponse({ success: false, error: error.message });
+        const chunkSize = 2000;
+        const chunks = [];
+        for (let i = 0; i < text.length; i += chunkSize) {
+            chunks.push({
+                chunkIndex: chunks.length,
+                content: text.substring(i, i + chunkSize),
+                status: 'pending'
             });
+        }
+
+        const newBook = {
+            title: title,
+            sourceUrl: sourceUrl,
+            chunks: chunks,
+            lastSentChunk: -1
+        };
+
+        addBook(newBook).then(addedBook => {
+            sendResponse({ success: true, book: addedBook });
+        }).catch(error => {
+            console.error('[Kuato] Failed to add book:', error);
+            sendResponse({ success: false, error: error.message });
+        });
 
         return true; // Indicates asynchronous response
-    } else if (request.action === 'getLibrary') {
+    }
+
+    if (request.action === 'getLibrary') {
         getLibrary().then(library => {
             sendResponse({ success: true, library: library });
         });
