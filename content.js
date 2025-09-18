@@ -171,9 +171,13 @@ function sendChunk(chunk) {
                     sendNextButton.textContent = 'Send Next Chapter';
                     return;
                 }
+                // Use the native setter to bypass React's input handling
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+                nativeInputValueSetter.call(chatInput, message);
 
-                chatInput.value = message;
-                chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+                // Dispatch an event to notify the framework of the change
+                const inputEvent = new Event('input', { bubbles: true });
+                chatInput.dispatchEvent(inputEvent);
                 sendButton.click();
                 
                 chunk.status = 'sent';
@@ -232,23 +236,63 @@ function initializeKuato() {
     populateLibraryDropdown();
 
     const loadNewButton = document.getElementById('kuato-load-new');
-    loadNewButton.addEventListener('click', () => {
+    loadNewButton.addEventListener('click', async () => {
         const url = prompt('Please enter the URL of the book to load:');
-        if (url) {
-            loadNewButton.textContent = 'Loading...';
-            loadNewButton.disabled = true;
-            chrome.runtime.sendMessage({ action: 'loadUrl', url: url }, (response) => {
-                loadNewButton.textContent = 'Load New Book from URL';
-                loadNewButton.disabled = false;
+        if (!url) return;
+
+        loadNewButton.textContent = 'Loading...';
+        loadNewButton.disabled = true;
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Network request failed with status ${response.status}`);
+            }
+
+            const contentType = response.headers.get('content-type');
+            const rawText = await response.text();
+
+            let title = 'Untitled';
+            let textContent = '';
+
+            if (contentType && contentType.includes('text/html')) {
+                const doc = new DOMParser().parseFromString(rawText, "text/html");
+                const article = new Readability(doc).parse();
+                if (!article || !article.textContent) {
+                    console.warn('[Kuato] Readability failed. Falling back to body text.');
+                    title = doc.title || new URL(url).pathname.split('/').pop();
+                    textContent = doc.body.textContent || '';
+                } else {
+                    title = article.title;
+                    textContent = article.textContent;
+                }
+            } else {
+                // Assume plain text
+                title = new URL(url).pathname.split('/').pop();
+                textContent = rawText;
+            }
+
+            chrome.runtime.sendMessage({
+                action: 'addBookFromText',
+                title: title,
+                text: textContent,
+                sourceUrl: url
+            }, (response) => {
                 if (response && response.success) {
                     alert(`Book "${response.book.title}" loaded successfully!`);
                     populateLibraryDropdown();
                 } else {
                     const errorMessage = response ? response.error : 'An unknown error occurred.';
-                    alert(`Failed to load book.\n\nReason: ${errorMessage}`);
-                    console.error('Kuato - Failed to load book. Full response:', response);
+                    alert(`Failed to save book.\n\nReason: ${errorMessage}`);
                 }
             });
+
+        } catch (error) {
+            alert(`Failed to load and process URL.\n\nReason: ${error.message}`);
+            console.error('[Kuato] Error in content script processing:', error);
+        } finally {
+            loadNewButton.textContent = 'Load New Book from URL';
+            loadNewButton.disabled = false;
         }
     });
 

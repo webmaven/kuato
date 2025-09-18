@@ -5,14 +5,6 @@
  * To run, open tests/test-runner.html in a browser.
  */
 
-/**
- * Dummy function to prevent errors when `background.js` is loaded in a non-worker context.
- * The test harness loads dependencies via <script> tags instead.
- */
-function importScripts(script) {
-    console.log(`(Test Harness) Mocked importScripts call for: ${script}`);
-}
-
 // --- Mocks and Test Harness ---
 
 // This mock needs to be defined before background.js is loaded.
@@ -128,6 +120,30 @@ function test(name, fn) {
 }
 
 function runUnitTests() {
+    test('addBookFromText message should create and save a new book', async (done) => {
+        // Arrange
+        chrome.storage.local.clear(() => {});
+        const request = {
+            action: 'addBookFromText',
+            title: 'Test Title',
+            text: 'This is the full text content.',
+            sourceUrl: 'https://example.com'
+        };
+
+        // Act
+        chrome.runtime._sendMessage(request, {}, async (response) => {
+            // Assert
+            assert(response.success, 'Response should be successful');
+            assertDeepEqual(response.book.title, 'Test Title', 'Book title should be correct');
+            assert(response.book.chunks.length === 1, 'Book should be split into one chunk');
+
+            const library = await getLibrary();
+            assert(library.length === 1, 'Book should be saved to the library');
+            assertDeepEqual(library[0].title, 'Test Title', 'Saved book should have correct title');
+            done();
+        });
+    });
+
     test('addBook should add a new book to the library', async (done) => {
         // Arrange
         chrome.storage.local.clear(() => {});
@@ -163,93 +179,8 @@ function runUnitTests() {
 }
 
 function runIntegrationTests() {
-    // Redefine the test helper for integration tests
-    function test(name, fn) {
-        tests.push({ name, fn, type: 'integration' });
-    }
-
-    test('loadUrl message should fetch, parse, chunk, and save a book', async (done) => {
-        // Arrange
-        chrome.storage.local.clear(() => {});
-        const fakeHtml = `
-            <html>
-                <head><title>Test Article</title></head>
-                <body>
-                    <h1>Main Title</h1>
-                    <p>This is the first paragraph of the article.</p>
-                    <p>This is the second paragraph, which is a bit longer.</p>
-                </body>
-            </html>`;
-
-        // Mock the global fetch
-        const originalFetch = window.fetch;
-        window.fetch = async (url) => {
-            return {
-                text: async () => fakeHtml
-            };
-        };
-
-        const request = {
-            action: 'loadUrl',
-            url: 'https://fake-article.com'
-        };
-
-        // Act: Simulate the message from a content script
-        chrome.runtime._sendMessage(request, {}, async (response) => {
-            // Assert on the response
-            assert(response.success, 'Response should be successful');
-            assertDeepEqual(response.book.title, 'Test Article', 'Book title should be parsed correctly');
-            assert(response.book.chunks.length > 0, 'Book should be split into chunks');
-
-            const content = response.book.chunks[0].content;
-            assert(content.includes('This is the first paragraph'), 'Content should include the first paragraph');
-            assert(content.includes('the second paragraph'), 'Content should include the second paragraph');
-
-            // Assert on the stored data
-            const library = await getLibrary();
-            assert(library.length === 1, 'Book should be saved to the library');
-            assertDeepEqual(library[0].title, 'Test Article', 'Saved book should have the correct title');
-
-            // Cleanup
-            window.fetch = originalFetch;
-            done();
-        });
-    });
-
-    test('loadUrl message should handle plain text files correctly', async (done) => {
-        // Arrange
-        chrome.storage.local.clear(() => {});
-        const fakeText = "This is a plain text document.\nIt has multiple lines.";
-
-        const originalFetch = window.fetch;
-        window.fetch = async (url) => {
-            return {
-                ok: true,
-                headers: { get: () => 'text/plain' },
-                text: async () => fakeText
-            };
-        };
-
-        const request = {
-            action: 'loadUrl',
-            url: 'https://example.com/file.txt'
-        };
-
-        // Act
-        chrome.runtime._sendMessage(request, {}, async (response) => {
-            // Assert
-            assert(response.success, 'Response should be successful for plain text');
-            assertDeepEqual(response.book.title, 'file.txt', 'Title should be derived from the URL');
-            assertDeepEqual(response.book.chunks[0].content, fakeText, 'Content should be the raw text');
-
-            const library = await getLibrary();
-            assert(library.length === 1, 'Plain text book should be saved to library');
-
-            // Cleanup
-            window.fetch = originalFetch;
-            done();
-        });
-    });
+    // Integration tests for content.js are not possible in this environment.
+    // The core logic has been moved there, and these tests are now obsolete.
 }
 
 

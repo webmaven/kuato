@@ -6,8 +6,6 @@
 
 // Note: This script depends on Readability.js, which we will need to add
 // to a 'lib' directory in the project.
-importScripts('lib/Readability.js');
-
 // --- Initialization ---
 
 /**
@@ -80,70 +78,37 @@ async function updateBook(bookId, updatedData) {
  * Listens for messages from other parts of the extension (like content scripts).
  */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'loadUrl') {
-        fetch(request.url)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`Network request failed with status ${response.status} - ${response.statusText}`);
-                }
-                const contentType = response.headers.get('content-type');
-                return response.text().then(text => ({
-                    text,
-                    isHtml: contentType && contentType.includes('text/html')
-                }));
-            })
-            .then(data => {
-                let title = 'Untitled';
-                let text = '';
+    if (request.action === 'addBookFromText') {
+        const { title, text, sourceUrl } = request;
 
-                if (data.isHtml) {
-                    const doc = new DOMParser().parseFromString(data.text, "text/html");
-                    const reader = new Readability(doc);
-                    const article = reader.parse();
-
-                    if (!article || !article.textContent) {
-                        // Fallback for HTML pages that Readability can't parse
-                        console.warn('[Kuato] Readability failed on an HTML page. Using document title and raw text.');
-                        title = doc.title || new URL(request.url).pathname.split('/').pop() || 'Untitled';
-                        text = doc.body.textContent || '';
-                    } else {
-                        title = article.title || 'Untitled';
-                        text = article.textContent;
-                    }
-                } else {
-                    // Handle as plain text
-                    title = new URL(request.url).pathname.split('/').pop() || 'Untitled Text';
-                    text = data.text;
-                }
-
-                const chunkSize = 2000;
-                const chunks = [];
-                for (let i = 0; i < text.length; i += chunkSize) {
-                    chunks.push({
-                        chunkIndex: chunks.length,
-                        content: text.substring(i, i + chunkSize),
-                        status: 'pending'
-                    });
-                }
-                
-                const newBook = {
-                    title: title,
-                    sourceUrl: request.url,
-                    chunks: chunks,
-                    lastSentChunk: -1
-                };
-
-                addBook(newBook).then(addedBook => {
-                    sendResponse({ success: true, book: addedBook });
-                });
-            })
-            .catch(error => {
-                console.error('[Kuato] A failure occurred during the loadUrl process:', error);
-                sendResponse({ success: false, error: error.message });
+        const chunkSize = 2000;
+        const chunks = [];
+        for (let i = 0; i < text.length; i += chunkSize) {
+            chunks.push({
+                chunkIndex: chunks.length,
+                content: text.substring(i, i + chunkSize),
+                status: 'pending'
             });
+        }
+
+        const newBook = {
+            title: title,
+            sourceUrl: sourceUrl,
+            chunks: chunks,
+            lastSentChunk: -1
+        };
+
+        addBook(newBook).then(addedBook => {
+            sendResponse({ success: true, book: addedBook });
+        }).catch(error => {
+            console.error('[Kuato] Failed to add book:', error);
+            sendResponse({ success: false, error: error.message });
+        });
 
         return true; // Indicates asynchronous response
-    } else if (request.action === 'getLibrary') {
+    }
+
+    if (request.action === 'getLibrary') {
         getLibrary().then(library => {
             sendResponse({ success: true, library: library });
         });

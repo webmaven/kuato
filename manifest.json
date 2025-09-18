@@ -16,7 +16,7 @@
   "content_scripts": [
     {
       "matches": ["https://beta.nomi.ai/*"],
-      "js": ["content.js"]
+      "js": ["lib/Readability.js", "content.js"]
     }
   ]
 }
