@@ -163,7 +163,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         formData.append('c', request.content);
         fetch('https://fars.ee/?u=1', { method: 'POST', body: formData })
             .then(response => response.text())
-            .then(url => sendResponse({ success: true, url: url.trim() }))
+            .then(url => {
+                const trimmedUrl = url.trim();
+                if (trimmedUrl.startsWith('http')) {
+                    sendResponse({ success: true, url: trimmedUrl });
+                } else {
+                    throw new Error(`Invalid response from pastebin: ${trimmedUrl}`);
+                }
+            })
             .catch(error => {
                 console.error('Error uploading to pastebin:', error);
                 sendResponse({ success: false, error: error.message });
