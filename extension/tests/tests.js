@@ -83,7 +83,8 @@ var chrome = {
                 const result = {};
                 const keyList = Array.isArray(keys) ? keys : [keys];
                 keyList.forEach(key => {
-                    result[key] = JSON.parse(JSON.stringify(chrome._storage[key] || {}));
+                    // Default to null to align with real chrome.storage behavior for missing keys
+                    result[key] = JSON.parse(JSON.stringify(chrome._storage[key] || null));
                 });
                 if (callback) {
                     setTimeout(() => callback(result), 0);
