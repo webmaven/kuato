@@ -7,6 +7,17 @@
 
 // --- Mocks and Test Harness ---
 
+// Mock Readability for offscreen parsing tests
+window.Readability = class {
+    constructor(doc) { this.doc = doc; }
+    parse() {
+        return {
+            title: 'Mock Article Title',
+            textContent: 'This is the mock article content.'
+        };
+    }
+};
+
 // This mock needs to be defined before background.js is loaded.
 const chrome = {
     _storage: {},
@@ -19,8 +30,21 @@ const chrome = {
         },
         // Helper to simulate a message event for tests
         _sendMessage: (request, sender, sendResponse) => {
+            // Simulate the background script sending a message to the offscreen script
+            if (request.action === 'parseHtml') {
+                const article = new Readability(null).parse();
+                sendResponse({ success: true, article });
+                return;
+            }
+
+            // Simulate content script sending a message to the background script
             chrome.runtime._listeners.forEach(listener => {
-                listener(request, sender, sendResponse);
+                // The background listener is what we are testing.
+                // We assume it's the one that doesn't have a target, or the target is not 'offscreen'
+                const isBackgroundListener = !sender.tab;
+                if(isBackgroundListener) {
+                    listener(request, sender, sendResponse);
+                }
             });
         }
     },
@@ -168,6 +192,53 @@ function runUnitTests() {
         assertDeepEqual(retrievedSettings.chunkSize, 5000, 'Should save and retrieve chunk size');
         assertDeepEqual(retrievedSettings.messageFormat, 'test format', 'Should save and retrieve message format');
         done();
+    });
+
+    test('loadFile message should process a plain text file', async (done) => {
+        // Arrange
+        await new Promise(res => chrome.storage.local.clear(res));
+        const request = {
+            action: 'loadFile',
+            filename: 'test.txt',
+            content: 'This is a plain text file.'
+        };
+
+        // Act
+        chrome.runtime._sendMessage(request, {}, async (response) => {
+            // Assert
+            assert(response.success, 'Response should be successful for .txt file');
+            assertDeepEqual(response.book.title, 'test.txt', 'Book title should be the filename');
+            assert(response.book.chunks.length === 1, 'Book should have one chunk');
+            assertDeepEqual(response.book.chunks[0].content, 'This is a plain text file.', 'Chunk content should be correct');
+
+            const library = await getLibrary();
+            assert(library.length === 1, 'Book should be saved to the library');
+            assertDeepEqual(library[0].title, 'test.txt', 'Saved book should have correct title');
+            done();
+        });
+    });
+
+    test('loadFile message should process an HTML file using offscreen parser', async (done) => {
+        // Arrange
+        await new Promise(res => chrome.storage.local.clear(res));
+        const request = {
+            action: 'loadFile',
+            filename: 'test.html',
+            content: '<h1>Hello</h1><p>World</p>'
+        };
+
+        // Act
+        chrome.runtime._sendMessage(request, {}, async (response) => {
+            // Assert
+            assert(response.success, 'Response should be successful for .html file');
+            assertDeepEqual(response.book.title, 'Mock Article Title', 'Book title should come from mocked Readability');
+            assertDeepEqual(response.book.chunks[0].content, 'This is the mock article content.', 'Chunk content should be from mocked Readability');
+
+            const library = await getLibrary();
+            assert(library.length === 1, 'Book should be saved to the library');
+            assertDeepEqual(library[0].title, 'Mock Article Title', 'Saved HTML book should have correct title');
+            done();
+        });
     });
 
     test('addBook should add a new book to the library', async (done) => {
