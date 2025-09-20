@@ -17,19 +17,6 @@ window.Readability = class {
     }
 };
 
-// --- Mocks and Test Harness ---
-
-// Mock Readability for offscreen parsing tests
-window.Readability = class {
-    constructor(doc) { this.doc = doc; }
-    parse() {
-        return {
-            title: 'Mock Article Title',
-            textContent: 'This is the mock article content.'
-        };
-    }
-};
-
 // Mock pdfjsLib for offscreen parsing tests
 window.pdfjsLib = {
     GlobalWorkerOptions: { workerSrc: '' },
@@ -46,7 +33,9 @@ window.pdfjsLib = {
 };
 
 // This mock needs to be defined before background.js is loaded.
-const chrome = {
+// We use 'var' instead of 'const' to avoid a conflict with the browser's
+// native 'chrome' object, which can cause a "redeclaration" error.
+var chrome = {
     _storage: {},
     runtime: {
         _listeners: [],
