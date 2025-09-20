@@ -6,7 +6,6 @@
  */
 
 // --- Mocks and Test Harness ---
-
 // Mock Readability for offscreen parsing tests
 window.Readability = class {
     constructor(doc) { this.doc = doc; }

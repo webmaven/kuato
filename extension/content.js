@@ -317,7 +317,6 @@ function initializeKuato() {
         settingsModal.style.display = 'none';
         alert('Settings saved.');
     });
-
     const loadUrlButton = document.getElementById('kuato-load-url');
     loadUrlButton.addEventListener('click', () => {
         const url = prompt('Please enter the URL of the book to load:');
