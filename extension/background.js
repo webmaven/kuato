@@ -6,13 +6,35 @@
 
 // --- Initialization ---
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.get(['kuatoLibrary'], (result) => {
+  chrome.storage.local.get(['kuatoLibrary', 'kuatoSettings'], (result) => {
     if (!result.kuatoLibrary) {
       chrome.storage.local.set({ kuatoLibrary: [] });
       console.log('Kuato library initialized.');
     }
+    if (!result.kuatoSettings) {
+      chrome.storage.local.set({
+        kuatoSettings: {
+          chunkSize: 2000,
+          pastebinService: 'fars.ee',
+          messageFormat: '[From "{title}", Part {chunkIndex}/{chunkCount}] Please read this: {url}'
+        }
+      });
+      console.log('Kuato settings initialized.');
+    }
   });
 });
+
+// --- Settings Management ---
+async function getSettings() {
+    const result = await chrome.storage.local.get('kuatoSettings');
+    return result.kuatoSettings;
+}
+
+async function saveSettings(settings) {
+    await chrome.storage.local.set({ kuatoSettings: settings });
+    return settings;
+}
+
 
 // --- Library Management Functions ---
 
@@ -82,20 +104,65 @@ async function setupOffscreenDocument(path) {
 // --- Main Logic ---
 
 async function processAndSaveBook(title, textContent, sourceUrl) {
-    const chunkSize = 2000;
-    const chunks = [];
-    for (let i = 0; i < textContent.length; i += chunkSize) {
-        chunks.push({
-            chunkIndex: chunks.length,
-            content: textContent.substring(i, i + chunkSize),
-            status: 'pending'
-        });
+    const settings = await getSettings();
+    const chunkSize = settings.chunkSize || 2000;
+    const allChunks = [];
+
+    // Regex to find chapter headings
+    const chapterRegex = /(?:^|\n\n)(Chapter\s+\d+|Part\s+\d+|Book\s+\d+)/gi;
+    const chapters = textContent.split(chapterRegex);
+
+    let chapterTitle = "Introduction";
+    let chapterIndex = 0;
+
+    for (let i = 0; i < chapters.length; i++) {
+        let text = chapters[i];
+        if (i % 2 === 1) { // This is a chapter title match
+            chapterTitle = text.trim();
+            chapterIndex++;
+            continue; // The next item in the array is the content of this chapter
+        }
+
+        let remainingText = text.trim();
+        if (!remainingText) continue;
+
+        let chunkIndexInChapter = 0;
+        while (remainingText.length > 0) {
+            let chunkContent;
+            if (remainingText.length <= chunkSize) {
+                chunkContent = remainingText;
+                remainingText = '';
+            } else {
+                let splitAt = -1;
+                splitAt = remainingText.lastIndexOf('\n\n', chunkSize);
+                if (splitAt === -1) {
+                    const sentenceEnders = ['.', '!', '?'];
+                    for (const ender of sentenceEnders) {
+                        const potentialSplit = remainingText.lastIndexOf(ender + ' ', chunkSize);
+                        if (potentialSplit > splitAt) splitAt = potentialSplit;
+                    }
+                }
+                if (splitAt === -1) splitAt = remainingText.lastIndexOf(' ', chunkSize);
+                if (splitAt === -1) splitAt = chunkSize;
+
+                chunkContent = remainingText.substring(0, splitAt + 1);
+                remainingText = remainingText.substring(splitAt + 1);
+            }
+
+            allChunks.push({
+                chunkIndex: allChunks.length,
+                chapter: chapterTitle,
+                chapterChunkIndex: chunkIndexInChapter++,
+                content: chunkContent.trim(),
+                status: 'pending'
+            });
+        }
     }
-    
+
     const newBook = {
         title: title,
         sourceUrl: sourceUrl,
-        chunks: chunks,
+        chunks: allChunks,
         lastSentChunk: -1
     };
 
@@ -191,6 +258,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     if (request.action === 'updateBook') {
         updateBook(request.bookId, request.data).then(book => sendResponse({ success: true, book }));
+        return true;
+    }
+    if (request.action === 'getSettings') {
+        getSettings().then(settings => sendResponse({ success: true, settings }));
+        return true;
+    }
+    if (request.action === 'saveSettings') {
+        saveSettings(request.settings).then(settings => sendResponse({ success: true, settings }));
         return true;
     }
     if (request.action === 'uploadToPastebin') {
