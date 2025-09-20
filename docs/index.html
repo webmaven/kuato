@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuato - Chrome Extension</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">
+                <img src="img/logo.png" alt="Kuato Logo">
+                <h1>Kuato</h1>
+            </div>
+            <ul>
+                <li><a href="#about">About</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#install">Install</a></li>
+                <li><a href="#privacy">Privacy</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="hero">
+            <img src="img/logo.png" alt="Kuato Logo" class="hero-logo">
+            <h2>Unleash the hidden web.</h2>
+            <p>Kuato is a revolutionary browser extension that changes everything.</p>
+            <a href="#install" class="cta-button">Install Now</a>
+        </section>
+
+        <section id="about">
+            <h3>About Kuato</h3>
+            <p>Kuato is a powerful tool that gives you unprecedented control over your browsing experience. Inspired by the iconic character, Kuato helps you see what's really there.</p>
+        </section>
+
+        <section id="features">
+            <h3>Features</h3>
+            <ul>
+                <li><strong>Import from URL:</strong> Load any article, story, or book from a URL for processing.</li>
+                <li><strong>Automatic Text Chunking:</strong> Automatically splits long texts into smaller, manageable chunks, perfect for AI conversations.</li>
+                <li><strong>Sequential Sending:</strong> Send text chunks one by one ("Send Next") or all at once ("Send All"), waiting for your AI to respond between each part.</li>
+                <li><strong>Local Library:</strong> All your loaded texts are saved in a local library on your browser for easy access.</li>
+                <li><strong>Simple Management:</strong> Easily select, rename, or delete books from your library.</li>
+            </ul>
+        </section>
+
+        <section id="install">
+            <h3>Get Kuato Now</h3>
+            <p>Install the Kuato extension from the Chrome Web Store.</p>
+            <a href="#" class="cta-button">Install for Chrome</a>
+        </section>
+
+        <section id="privacy">
+            <h3>Privacy Policy</h3>
+            <p><strong>Last Updated: 2025-09-20</strong></p>
+            <p>Your privacy is important to us. This privacy policy explains what data the Kuato extension collects and how it is used.</p>
+            <h4><strong>1. Data Collection and Storage</strong></h4>
+            <p>Kuato is designed to be privacy-first. <strong>All of your data, including the books you load and your personal settings, is stored exclusively on your local machine using the browser's built-in storage.</strong> This data never leaves your computer and is never transmitted to the developer or any third-party servers.</p>
+            <h4><strong>2. Permissions</strong></h4>
+            <p>The Kuato extension requests two main permissions:</p>
+            <ul>
+                <li><strong>Access to all URLs (<code>&lt;all_urls&gt;</code>):</strong> This permission is required for the core functionality of the extension, which is to fetch the content of a URL (like an article or an e-book) that <em>you</em> provide. The extension only ever fetches URLs that you explicitly ask it to. It does not access your browsing history or data from any other website automatically.</li>
+                <li><strong>Access to <code>fars.ee</code>:</strong> This permission is used for the "Send" functionality, as explained below.</li>
+            </ul>
+            <h4><strong>3. Use of Third-Party Services (Pastebin)</strong></h4>
+            <p>To send text to your AI companion, Kuato breaks the text into smaller chunks. To avoid issues with message length and formatting, each chunk is uploaded to a public, anonymous pastebin service (<code>fars.ee</code>). This generates a unique URL for that chunk of text, which is then sent to the AI.</p>
+            <p>This process is anonymous:</p>
+            <ul>
+                <li>Only the text chunk itself is uploaded.</li>
+                <li>No information about you, your account, or your browsing activity is included in this upload.</li>
+                <li>The resulting pastebin URL is not associated with you.</li>
+            </ul>
+            <h4><strong>4. No Analytics or Tracking</strong></h4>
+            <p>The Kuato extension does not include any analytics, tracking codes, or advertising. The developer does not and cannot track your usage of the extension.</p>
+            <h4><strong>5. Contact</strong></h4>
+            <p>If you have any questions about this privacy policy, please open an issue on our GitHub repository.</p>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 Kuato. All rights reserved.</p>
+    </footer>
+</body>
+</html>

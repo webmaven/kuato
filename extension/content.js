@@ -16,6 +16,11 @@ const nomiSelectors = {
 // --- Global State ---
 let currentBook = null;
 let isSendingAll = false;
+let kuatoSettings = {
+    chunkSize: 2000,
+    pastebinService: 'fars.ee',
+    messageFormat: '[From "{title}", Part {chunkIndex}/{chunkCount}] Please read this: {url}'
+};
 
 // --- UI Creation ---
 function createKuatoPanel() {
@@ -39,15 +44,37 @@ function createKuatoPanel() {
       </div>
       <input type="file" id="kuato-file-input" style="display: none;" />
     </div>
-    <div id="kuato-book-info" style="display: none;">
-      <hr>
-      <h4 id="kuato-book-title"></h4>
-      <div id="kuato-chunks-status"></div>
-      <div class="kuato-controls">
-          <button id="kuato-send-next">Send Next Chapter</button>
-          <button id="kuato-send-all">Send All</button>
-          <button id="kuato-pause" style="display: none;">Pause</button>
-      </div>
+    <div id="kuato-collapsible-content">
+        <div class="kuato-section">
+          <label for="kuato-library-select">Select Book:</label>
+          <div style="display: flex; gap: 5px;">
+            <select id="kuato-library-select" style="width: 100%;">
+              <option value="">-- No book selected --</option>
+            </select>
+            <button id="kuato-rename-book" style="width: auto;">Rename</button>
+          </div>
+        </div>
+        <div class="kuato-section">
+          <p style="margin-top: 0; margin-bottom: 5px; font-weight: bold;">Load New Book</p>
+          <div style="display: flex; gap: 5px;">
+            <button id="kuato-load-url">From URL</button>
+            <button id="kuato-load-file">From File</button>
+          </div>
+          <input type="file" id="kuato-file-input" style="display: none;" />
+        </div>
+        <div class="kuato-section">
+            <button id="kuato-open-settings" style="margin-top: 5px;">Settings</button>
+        </div>
+        <div id="kuato-book-info" style="display: none;">
+            <hr>
+            <h4 id="kuato-book-title"></h4>
+            <div id="kuato-chunks-status"></div>
+            <div class="kuato-controls">
+                <button id="kuato-send-next">Send Next Chapter</button>
+                <button id="kuato-send-all">Send All</button>
+                <button id="kuato-pause" style="display: none;">Pause</button>
+            </div>
+        </div>
     </div>
   `;
   document.body.appendChild(panel);
@@ -56,16 +83,71 @@ function createKuatoPanel() {
 function addKuatoPanelStyles() {
     const style = document.createElement('style');
     style.textContent = `
-        #kuato-panel { position: fixed; top: 20px; right: 20px; width: 300px; background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 5px; padding: 15px; z-index: 9999; font-family: sans-serif; font-size: 14px; color: #333; }
-        #kuato-panel h3, #kuato-panel h4 { margin-top: 0; margin-bottom: 10px; color: #111; }
+        #kuato-panel {
+            position: fixed; top: 20px; right: 20px; width: 300px;
+            background-color: #f0f0f0; border: 1px solid #ccc;
+            border-radius: 5px; padding: 15px; z-index: 9999;
+            font-family: sans-serif; font-size: 14px; color: #333;
+            transition: width 0.3s ease-in-out;
+        }
+        #kuato-panel.kuato-collapsed {
+            width: 180px; /* Smaller width when collapsed */
+        }
+        #kuato-panel.kuato-collapsed #kuato-collapsible-content {
+            display: none;
+        }
+        .kuato-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        #kuato-panel h3, #kuato-panel h4 { margin: 0; color: #111; }
+        #kuato-toggle-collapse {
+            width: 24px; height: 24px; padding: 0;
+            font-size: 16px; line-height: 24px; text-align: center;
+            border: 1px solid #ccc; border-radius: 3px; background-color: #fff; cursor: pointer;
+        }
         .kuato-section { margin-bottom: 15px; }
         #kuato-panel button { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 3px; background-color: #fff; cursor: pointer; }
         #kuato-panel button:hover { background-color: #e9e9e9; }
         #kuato-panel select { width: 100%; padding: 8px; }
         #kuato-chunks-status { max-height: 150px; overflow-y: auto; border: 1px solid #ddd; padding: 5px; margin-bottom: 10px; }
         .kuato-controls button { margin-top: 5px; }
+        #kuato-settings-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+        #kuato-settings-content { background-color: #f0f0f0; padding: 20px; border-radius: 5px; width: 400px; }
+        .kuato-setting { margin-bottom: 15px; }
+        .kuato-setting label { display: block; margin-bottom: 5px; }
+        .kuato-setting input, .kuato-setting select { width: 100%; padding: 8px; box-sizing: border-box; }
+        .kuato-settings-buttons { text-align: right; margin-top: 20px; }
     `;
     document.head.appendChild(style);
+}
+
+function createSettingsModal() {
+    const modal = document.createElement('div');
+    modal.id = 'kuato-settings-modal';
+    modal.style.display = 'none'; // Hidden by default
+    modal.innerHTML = `
+        <div id="kuato-settings-content">
+            <h2>Kuato Settings</h2>
+            <div class="kuato-setting">
+                <label for="kuato-setting-chunk-size">Chunk Size (characters):</label>
+                <input type="number" id="kuato-setting-chunk-size" min="100" max="10000" step="100">
+            </div>
+            <div class="kuato-setting">
+                <label for="kuato-setting-pastebin">Pastebin Service:</label>
+                <select id="kuato-setting-pastebin" disabled>
+                    <option>fars.ee</option>
+                </select>
+            </div>
+            <div class="kuato-setting">
+                <label for="kuato-setting-message-format">Message Format:</label>
+                <input type="text" id="kuato-setting-message-format">
+                <small>Placeholders: {title}, {chapter}, {chapterChunkIndex}, {chunkIndex}, {chunkCount}, {url}</small>
+            </div>
+            <div class="kuato-settings-buttons">
+                <button id="kuato-settings-save">Save & Close</button>
+                <button id="kuato-settings-cancel">Cancel</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
 }
 
 // --- UI Logic and Rendering ---
@@ -93,10 +175,19 @@ function renderBookInfo() {
     document.getElementById('kuato-book-title').textContent = currentBook.title;
     const chunksStatusDiv = document.getElementById('kuato-chunks-status');
     chunksStatusDiv.innerHTML = '';
+    let lastChapter = null;
     currentBook.chunks.forEach(chunk => {
+        if (chunk.chapter !== lastChapter) {
+            const chapterDiv = document.createElement('div');
+            chapterDiv.style.fontWeight = 'bold';
+            chapterDiv.style.marginTop = '5px';
+            chapterDiv.textContent = chunk.chapter;
+            chunksStatusDiv.appendChild(chapterDiv);
+            lastChapter = chunk.chapter;
+        }
         const chunkDiv = document.createElement('div');
         const status = chunk.status || 'pending';
-        chunkDiv.textContent = `Chunk ${chunk.chunkIndex + 1}: ${status}`;
+        chunkDiv.textContent = `  Part ${chunk.chapterChunkIndex + 1}: ${status}`;
         if (status !== 'sent') {
             const retryButton = document.createElement('button');
             retryButton.textContent = 'Retry';
@@ -121,11 +212,17 @@ function sendChunk(chunk) {
     sendNextButton.disabled = true;
     sendNextButton.textContent = 'Waiting for Nomi...';
     
-    const fullContent = `This is part ${chunk.chunkIndex + 1} of ${currentBook.chunks.length} of the text "${currentBook.title}".\n\n---\n\n${chunk.content}`;
+    const fullContent = `This is from ${chunk.chapter}, part ${chunk.chapterChunkIndex + 1} of the text "${currentBook.title}".\n\n---\n\n${chunk.content}`;
 
     chrome.runtime.sendMessage({ action: 'uploadToPastebin', content: fullContent }, (response) => {
         if (response && response.success) {
-            const message = `[From "${currentBook.title}", Part ${chunk.chunkIndex + 1}/${currentBook.chunks.length}] Please read this: ${response.url}`;
+            const message = kuatoSettings.messageFormat
+                .replace('{title}', currentBook.title)
+                .replace('{chunkIndex}', chunk.chunkIndex + 1)
+                .replace('{chunkCount}', currentBook.chunks.length)
+                .replace('{chapter}', chunk.chapter)
+                .replace('{chapterChunkIndex}', chunk.chapterChunkIndex + 1)
+                .replace('{url}', response.url);
             const chatInput = document.querySelector(nomiSelectors.chatInput);
             const sendButton = document.querySelector(nomiSelectors.sendButton);
 
@@ -196,8 +293,43 @@ function initializeKuato() {
     
     addKuatoPanelStyles();
     createKuatoPanel();
+    createSettingsModal();
     populateLibraryDropdown();
 
+    // Load settings from storage
+    chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
+        if (response && response.success && response.settings) {
+            kuatoSettings = { ...kuatoSettings, ...response.settings };
+        }
+    });
+
+    const settingsModal = document.getElementById('kuato-settings-modal');
+    const openSettingsButton = document.getElementById('kuato-open-settings');
+    const closeSettingsButton = document.getElementById('kuato-settings-cancel');
+    const saveSettingsButton = document.getElementById('kuato-settings-save');
+
+    openSettingsButton.addEventListener('click', () => {
+        document.getElementById('kuato-setting-chunk-size').value = kuatoSettings.chunkSize;
+        document.getElementById('kuato-setting-message-format').value = kuatoSettings.messageFormat;
+        settingsModal.style.display = 'flex';
+    });
+
+    closeSettingsButton.addEventListener('click', () => {
+        settingsModal.style.display = 'none';
+    });
+
+    saveSettingsButton.addEventListener('click', () => {
+        const newSettings = {
+            chunkSize: parseInt(document.getElementById('kuato-setting-chunk-size').value, 10),
+            messageFormat: document.getElementById('kuato-setting-message-format').value
+        };
+
+        kuatoSettings = { ...kuatoSettings, ...newSettings };
+        chrome.runtime.sendMessage({ action: 'saveSettings', settings: kuatoSettings });
+
+        settingsModal.style.display = 'none';
+        alert('Settings saved.');
+    });
     const loadUrlButton = document.getElementById('kuato-load-url');
     loadUrlButton.addEventListener('click', () => {
         const url = prompt('Please enter the URL of the book to load:');
@@ -233,7 +365,6 @@ function initializeKuato() {
 
         const reader = new FileReader();
         const isPdf = file.name.toLowerCase().endsWith('.pdf');
-
         reader.onload = (e) => {
             const content = e.target.result;
             loadFileButton.textContent = 'Loading...';
@@ -258,6 +389,7 @@ function initializeKuato() {
             });
         };
 
+      
         reader.onerror = (e) => {
             alert('Error reading file.');
             console.error('Kuato - FileReader error:', e);
@@ -298,6 +430,22 @@ function initializeKuato() {
         }
     });
 
+    const panel = document.getElementById('kuato-panel');
+    const toggleButton = document.getElementById('kuato-toggle-collapse');
+
+    // Function to toggle panel collapse
+    const togglePanel = (collapse) => {
+        const shouldCollapse = typeof collapse === 'boolean' ? collapse : !panel.classList.contains('kuato-collapsed');
+        panel.classList.toggle('kuato-collapsed', shouldCollapse);
+        toggleButton.textContent = shouldCollapse ? '[+]' : '[-]';
+        toggleButton.title = shouldCollapse ? 'Expand Panel' : 'Collapse Panel';
+    };
+
+    toggleButton.addEventListener('click', () => togglePanel());
+
+    // Collapse panel by default
+    togglePanel(true);
+
     const librarySelect = document.getElementById('kuato-library-select');
     librarySelect.addEventListener('change', () => {
         const bookId = librarySelect.value;
@@ -306,14 +454,17 @@ function initializeKuato() {
                 if (response && response.success && response.book) {
                     currentBook = response.book;
                     renderBookInfo();
+                    togglePanel(false); // Expand panel when a book is selected
                 } else {
                     currentBook = null;
                     document.getElementById('kuato-book-info').style.display = 'none';
+                    togglePanel(true); // Collapse if book fails to load
                 }
             });
         } else {
             currentBook = null;
             document.getElementById('kuato-book-info').style.display = 'none';
+            togglePanel(true); // Collapse when no book is selected
         }
     });
 
