@@ -144,6 +144,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         })();
         return true; // Indicates asynchronous response
     }
+
+    if (request.action === 'loadFile') {
+        const { filename, content } = request;
+        (async () => {
+            try {
+                let title, textContent;
+                const isHtml = filename.toLowerCase().endsWith('.html') || filename.toLowerCase().endsWith('.htm');
+
+                if (isHtml) {
+                    await setupOffscreenDocument('offscreen.html');
+                    const result = await chrome.runtime.sendMessage({
+                        action: 'parseHtml',
+                        target: 'offscreen',
+                        html: content
+                    });
+
+                    if (!result.success) throw new Error(result.error);
+                    title = result.article.title || filename; // Fallback to filename
+                    textContent = result.article.textContent;
+                } else {
+                    // For .txt and other files, treat as plain text
+                    title = filename;
+                    textContent = content;
+                }
+
+                const addedBook = await processAndSaveBook(title, textContent, `file://${filename}`);
+                sendResponse({ success: true, book: addedBook });
+
+            } catch (error) {
+                console.error('[Kuato] Failed to load file:', error);
+                sendResponse({ success: false, error: error.message });
+            }
+        })();
+        return true; // Indicates asynchronous response
+    }
     
     // Keep other message handlers
     if (request.action === 'getLibrary') {

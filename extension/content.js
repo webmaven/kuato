@@ -33,7 +33,11 @@ function createKuatoPanel() {
       </div>
     </div>
     <div class="kuato-section">
-      <button id="kuato-load-new">Load New Book from URL</button>
+      <div style="display: flex; gap: 5px;">
+        <button id="kuato-load-url">From URL</button>
+        <button id="kuato-load-file">From File</button>
+      </div>
+      <input type="file" id="kuato-file-input" style="display: none;" />
     </div>
     <div id="kuato-book-info" style="display: none;">
       <hr>
@@ -194,15 +198,15 @@ function initializeKuato() {
     createKuatoPanel();
     populateLibraryDropdown();
 
-    const loadNewButton = document.getElementById('kuato-load-new');
-    loadNewButton.addEventListener('click', () => {
+    const loadUrlButton = document.getElementById('kuato-load-url');
+    loadUrlButton.addEventListener('click', () => {
         const url = prompt('Please enter the URL of the book to load:');
         if (url) {
-            loadNewButton.textContent = 'Loading...';
-            loadNewButton.disabled = true;
+            loadUrlButton.textContent = 'Loading...';
+            loadUrlButton.disabled = true;
             chrome.runtime.sendMessage({ action: 'loadUrl', url: url }, (response) => {
-                loadNewButton.textContent = 'Load New Book from URL';
-                loadNewButton.disabled = false;
+                loadUrlButton.textContent = 'From URL';
+                loadUrlButton.disabled = false;
                 if (response && response.success) {
                     alert(`Book "${response.book.title}" loaded successfully!`);
                     populateLibraryDropdown();
@@ -213,6 +217,51 @@ function initializeKuato() {
                 }
             });
         }
+    });
+
+    const loadFileButton = document.getElementById('kuato-load-file');
+    const fileInput = document.getElementById('kuato-file-input');
+    loadFileButton.addEventListener('click', () => {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const content = e.target.result;
+            loadFileButton.textContent = 'Loading...';
+            loadFileButton.disabled = true;
+
+            chrome.runtime.sendMessage({
+                action: 'loadFile',
+                filename: file.name,
+                content: content
+            }, (response) => {
+                loadFileButton.textContent = 'From File';
+                loadFileButton.disabled = false;
+                if (response && response.success) {
+                    alert(`Book "${response.book.title}" loaded successfully!`);
+                    populateLibraryDropdown();
+                } else {
+                    const errorMessage = response ? response.error : 'An unknown error occurred.';
+                    alert(`Failed to load book from file.\n\nReason: ${errorMessage}`);
+                    console.error('Kuato - Failed to load file. Full response:', response);
+                }
+            });
+        };
+        reader.onerror = (e) => {
+            alert('Error reading file.');
+            console.error('Kuato - FileReader error:', e);
+        };
+        reader.readAsText(file);
+
+        // Reset the input value to allow loading the same file again
+        fileInput.value = '';
     });
 
     const renameButton = document.getElementById('kuato-rename-book');
