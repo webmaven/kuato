@@ -44,6 +44,13 @@ var chrome = {
                 chrome.runtime._listeners.push(listener);
             }
         },
+        // Mock onInstalled to prevent startup errors in background.js
+        onInstalled: {
+            addListener: (listener) => {
+                // In a real test environment, you might want to call this listener.
+                // For now, a no-op is sufficient to prevent errors.
+            }
+        },
         getURL: (path) => `chrome-extension://mock-id/${path}`,
         // Helper to simulate a message event for tests
         _sendMessage: (request, sender, sendResponse) => {
@@ -71,26 +78,36 @@ var chrome = {
     },
     storage: {
         local: {
+            // Updated mock to support both callback and Promise-based calls
             get: (keys, callback) => {
                 const result = {};
                 const keyList = Array.isArray(keys) ? keys : [keys];
                 keyList.forEach(key => {
-                    result[key] = JSON.parse(JSON.stringify(chrome._storage[key] || null));
+                    result[key] = JSON.parse(JSON.stringify(chrome._storage[key] || {}));
                 });
-                // Simulate async behavior
-                setTimeout(() => callback(result), 0);
+                if (callback) {
+                    setTimeout(() => callback(result), 0);
+                    return;
+                }
+                return Promise.resolve(result);
             },
             set: (items, callback) => {
                 Object.keys(items).forEach(key => {
                     chrome._storage[key] = JSON.parse(JSON.stringify(items[key]));
                 });
-                 // Simulate async behavior
-                setTimeout(() => callback(), 0);
+                if (callback) {
+                    setTimeout(() => callback(), 0);
+                    return;
+                }
+                return Promise.resolve();
             },
             clear: (callback) => {
                 chrome._storage = {};
-                 // Simulate async behavior
-                setTimeout(() => callback(), 0);
+                if (callback) {
+                    setTimeout(() => callback(), 0);
+                    return;
+                }
+                return Promise.resolve();
             }
         }
     },
