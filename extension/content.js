@@ -27,9 +27,22 @@ function createKuatoPanel() {
   const panel = document.createElement('div');
   panel.id = 'kuato-panel';
   panel.innerHTML = `
-    <div class="kuato-header">
-      <h3>"Open your mind..." - Kuato</h3>
-      <button id="kuato-toggle-collapse" title="Collapse Panel">[-]</button>
+    <h3>"Open your mind..." - Kuato</h3>
+    <div class="kuato-section">
+      <label for="kuato-library-select">Select Book:</label>
+      <div style="display: flex; gap: 5px;">
+        <select id="kuato-library-select" style="width: 100%;">
+          <option value="">-- No book selected --</option>
+        </select>
+        <button id="kuato-rename-book" style="width: auto;">Rename</button>
+      </div>
+    </div>
+    <div class="kuato-section">
+      <div style="display: flex; gap: 5px;">
+        <button id="kuato-load-url">From URL</button>
+        <button id="kuato-load-file">From File</button>
+      </div>
+      <input type="file" id="kuato-file-input" style="display: none;" />
     </div>
     <div id="kuato-collapsible-content">
         <div class="kuato-section">
@@ -351,6 +364,7 @@ function initializeKuato() {
         }
 
         const reader = new FileReader();
+        const isPdf = file.name.toLowerCase().endsWith('.pdf');
         reader.onload = (e) => {
             const content = e.target.result;
             loadFileButton.textContent = 'Loading...';
@@ -359,6 +373,7 @@ function initializeKuato() {
             chrome.runtime.sendMessage({
                 action: 'loadFile',
                 filename: file.name,
+                encoding: isPdf ? 'dataURL' : 'text',
                 content: content
             }, (response) => {
                 loadFileButton.textContent = 'From File';
@@ -373,11 +388,18 @@ function initializeKuato() {
                 }
             });
         };
+
+      
         reader.onerror = (e) => {
             alert('Error reading file.');
             console.error('Kuato - FileReader error:', e);
         };
-        reader.readAsText(file);
+
+        if (isPdf) {
+            reader.readAsDataURL(file);
+        } else {
+            reader.readAsText(file);
+        }
 
         // Reset the input value to allow loading the same file again
         fileInput.value = '';

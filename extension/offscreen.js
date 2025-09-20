@@ -7,7 +7,7 @@
 
 chrome.runtime.onMessage.addListener(handleMessages);
 
-function handleMessages(request, sender, sendResponse) {
+async function handleMessages(request, sender, sendResponse) {
   if (request.target !== 'offscreen') {
     return false;
   }
@@ -16,10 +16,7 @@ function handleMessages(request, sender, sendResponse) {
     const { html } = request;
     
     try {
-      // Use DOMParser to turn the HTML string into a DOM document
       const doc = new DOMParser().parseFromString(html, 'text/html');
-      
-      // Use Readability to extract the article content
       const reader = new Readability(doc);
       const article = reader.parse();
       
@@ -27,7 +24,6 @@ function handleMessages(request, sender, sendResponse) {
         throw new Error('Readability parsing returned null.');
       }
 
-      // Send the parsed article object back to the background script
       sendResponse({ success: true, article: {
         title: article.title,
         textContent: article.textContent
@@ -38,7 +34,41 @@ function handleMessages(request, sender, sendResponse) {
       sendResponse({ success: false, error: e.message });
     }
 
-    return true; // Indicates asynchronous response
+    return true;
   }
+
+  if (request.action === 'parsePdf') {
+    const { pdfData } = request;
+    (async () => {
+        try {
+            const { pdfjsLib } = globalThis;
+            pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdfjs/pdf.worker.mjs');
+
+            const loadingTask = pdfjsLib.getDocument({
+                data: pdfData,
+                cMapUrl: chrome.runtime.getURL('lib/pdfjs/cmaps/'),
+                cMapPacked: true,
+            });
+
+            const pdf = await loadingTask.promise;
+            let fullText = '';
+
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                fullText += pageText + '\n\n';
+            }
+
+            sendResponse({ success: true, textContent: fullText.trim() });
+
+        } catch (error) {
+            console.error('[Kuato Offscreen] Error parsing PDF:', error);
+            sendResponse({ success: false, error: error.message });
+        }
+    })();
+    return true;
+  }
+
   return false;
 }
