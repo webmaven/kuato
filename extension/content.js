@@ -32,36 +32,36 @@ function createKuatoPanel() {
       <button id="kuato-toggle-collapse" title="Collapse Panel">[-]</button>
     </div>
     <div id="kuato-collapsible-content">
-      <div class="kuato-section">
-        <label for="kuato-library-select">Select Book:</label>
-        <div style="display: flex; gap: 5px;">
-          <select id="kuato-library-select" style="width: 100%;">
-            <option value="">-- No book selected --</option>
-          </select>
-          <button id="kuato-rename-book" style="width: auto;">Rename</button>
+        <div class="kuato-section">
+          <label for="kuato-library-select">Select Book:</label>
+          <div style="display: flex; gap: 5px;">
+            <select id="kuato-library-select" style="width: 100%;">
+              <option value="">-- No book selected --</option>
+            </select>
+            <button id="kuato-rename-book" style="width: auto;">Rename</button>
+          </div>
         </div>
-      </div>
-      <div class="kuato-section">
-        <p style="margin-top: 0; margin-bottom: 5px; font-weight: bold;">Load New Book</p>
-        <div style="display: flex; gap: 5px;">
+        <div class="kuato-section">
+          <p style="margin-top: 0; margin-bottom: 5px; font-weight: bold;">Load New Book</p>
+          <div style="display: flex; gap: 5px;">
             <button id="kuato-load-url">From URL</button>
             <button id="kuato-load-file">From File</button>
+          </div>
+          <input type="file" id="kuato-file-input" style="display: none;" />
         </div>
-        <input type="file" id="kuato-file-input" style="display: none;" />
-      </div>
-       <div class="kuato-section">
-        <button id="kuato-open-settings" style="margin-top: 5px;">Settings</button>
-      </div>
-      <div id="kuato-book-info" style="display: none;">
-        <hr>
-        <h4 id="kuato-book-title"></h4>
-        <div id="kuato-chunks-status"></div>
-        <div class="kuato-controls">
-            <button id="kuato-send-next">Send Next Chapter</button>
-            <button id="kuato-send-all">Send All</button>
-            <button id="kuato-pause" style="display: none;">Pause</button>
+        <div class="kuato-section">
+            <button id="kuato-open-settings" style="margin-top: 5px;">Settings</button>
         </div>
-      </div>
+        <div id="kuato-book-info" style="display: none;">
+            <hr>
+            <h4 id="kuato-book-title"></h4>
+            <div id="kuato-chunks-status"></div>
+            <div class="kuato-controls">
+                <button id="kuato-send-next">Send Next Chapter</button>
+                <button id="kuato-send-all">Send All</button>
+                <button id="kuato-pause" style="display: none;">Pause</button>
+            </div>
+        </div>
     </div>
   `;
   document.body.appendChild(panel);
