@@ -120,28 +120,54 @@ function test(name, fn) {
 }
 
 function runUnitTests() {
-    test('addBookFromText message should create and save a new book', async (done) => {
+    test('processAndSaveBook should split text smartly', async (done) => {
         // Arrange
-        chrome.storage.local.clear(() => {});
-        const request = {
-            action: 'addBookFromText',
-            title: 'Test Title',
-            text: 'This is the full text content.',
-            sourceUrl: 'https://example.com'
-        };
+        await new Promise(resolve => chrome.storage.local.clear(resolve));
+        await saveSettings({ chunkSize: 50 });
+        const text = "This is the first sentence. This is the second sentence. This is a very long third sentence that will be split.";
 
         // Act
-        chrome.runtime._sendMessage(request, {}, async (response) => {
-            // Assert
-            assert(response.success, 'Response should be successful');
-            assertDeepEqual(response.book.title, 'Test Title', 'Book title should be correct');
-            assert(response.book.chunks.length === 1, 'Book should be split into one chunk');
+        const book = await processAndSaveBook('Test Title', text, 'url');
 
-            const library = await getLibrary();
-            assert(library.length === 1, 'Book should be saved to the library');
-            assertDeepEqual(library[0].title, 'Test Title', 'Saved book should have correct title');
-            done();
-        });
+        // Assert
+        assert(book.chunks.length === 2, 'Should split into 2 chunks');
+        assertDeepEqual(book.chunks[0].content, 'This is the first sentence. This is the second.', 'First chunk should end at a word break');
+        assertDeepEqual(book.chunks[1].content, 'sentence. This is a very long third sentence that will be split.', 'Second chunk should contain the rest');
+        done();
+    });
+
+    test('processAndSaveBook should split text by chapters', async (done) => {
+        // Arrange
+        await new Promise(resolve => chrome.storage.local.clear(resolve));
+        await saveSettings({ chunkSize: 80 });
+        const text = "Introduction text. Chapter 1 The first part of chapter 1. The second part of chapter 1. Chapter 2 The only part of chapter 2.";
+
+        // Act
+        const book = await processAndSaveBook('Test Title', text, 'url');
+
+        // Assert
+        assert(book.chunks.length === 4, 'Should split into 4 chunks across chapters');
+        assertDeepEqual(book.chunks[0].chapter, 'Introduction', 'First chunk in Introduction');
+        assertDeepEqual(book.chunks[1].chapter, 'Chapter 1', 'Second chunk in Chapter 1');
+        assertDeepEqual(book.chunks[2].chapter, 'Chapter 1', 'Third chunk in Chapter 1');
+        assertDeepEqual(book.chunks[3].chapter, 'Chapter 2', 'Fourth chunk in Chapter 2');
+        assertDeepEqual(book.chunks[1].content, 'The first part of chapter 1.', 'Content of chunk in chapter 1');
+        done();
+    });
+
+    test('saveSettings and getSettings should manage settings', async (done) => {
+        // Arrange
+        await new Promise(resolve => chrome.storage.local.clear(resolve));
+        const newSettings = { chunkSize: 5000, messageFormat: 'test format' };
+
+        // Act
+        await saveSettings(newSettings);
+        const retrievedSettings = await getSettings();
+
+        // Assert
+        assertDeepEqual(retrievedSettings.chunkSize, 5000, 'Should save and retrieve chunk size');
+        assertDeepEqual(retrievedSettings.messageFormat, 'test format', 'Should save and retrieve message format');
+        done();
     });
 
     test('addBook should add a new book to the library', async (done) => {
