@@ -19,5 +19,16 @@
       "matches": ["https://beta.nomi.ai/*"],
       "js": ["content.js"]
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/pdfjs/pdf.worker.mjs",
+        "lib/pdfjs/cmaps/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
   ]
 }

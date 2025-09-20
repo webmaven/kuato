@@ -114,11 +114,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     throw new Error(`Network request failed with status ${response.status}`);
                 }
 
-                const contentType = response.headers.get('content-type');
-                const rawText = await response.text();
+                const contentType = response.headers.get('content-type') || '';
                 let title, textContent;
 
-                if (contentType && contentType.includes('text/html')) {
+                if (contentType.includes('text/html')) {
+                    const rawText = await response.text();
                     await setupOffscreenDocument('offscreen.html');
                     const result = await chrome.runtime.sendMessage({
                         action: 'parseHtml',
@@ -129,7 +129,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     if (!result.success) throw new Error(result.error);
                     title = result.article.title;
                     textContent = result.article.textContent;
+                } else if (contentType.includes('application/pdf')) {
+                    const pdfData = await response.arrayBuffer();
+                    await setupOffscreenDocument('offscreen.html');
+                    const result = await chrome.runtime.sendMessage({
+                        action: 'parsePdf',
+                        target: 'offscreen',
+                        pdfData: pdfData
+                    });
+
+                    if (!result.success) throw new Error(result.error);
+                    title = new URL(url).pathname.split('/').pop() || 'Untitled PDF';
+                    textContent = result.textContent;
                 } else {
+                    const rawText = await response.text();
                     title = new URL(url).pathname.split('/').pop() || 'Untitled Text';
                     textContent = rawText;
                 }
@@ -139,6 +152,59 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
             } catch (error) {
                 console.error('[Kuato] Failed to load URL:', error);
+                sendResponse({ success: false, error: error.message });
+            }
+        })();
+        return true; // Indicates asynchronous response
+    }
+
+    if (request.action === 'loadFile') {
+        const { filename, encoding, content } = request;
+        (async () => {
+            try {
+                let title, textContent;
+
+                if (encoding === 'dataURL') {
+                    // It's a PDF file
+                    const response = await fetch(content);
+                    const pdfData = await response.arrayBuffer();
+
+                    await setupOffscreenDocument('offscreen.html');
+                    const result = await chrome.runtime.sendMessage({
+                        action: 'parsePdf',
+                        target: 'offscreen',
+                        pdfData: pdfData
+                    });
+
+                    if (!result.success) throw new Error(result.error);
+                    title = filename;
+                    textContent = result.textContent;
+
+                } else {
+                    // It's a text-based file (HTML or TXT)
+                    const isHtml = filename.toLowerCase().endsWith('.html') || filename.toLowerCase().endsWith('.htm');
+                    if (isHtml) {
+                        await setupOffscreenDocument('offscreen.html');
+                        const result = await chrome.runtime.sendMessage({
+                            action: 'parseHtml',
+                            target: 'offscreen',
+                            html: content
+                        });
+
+                        if (!result.success) throw new Error(result.error);
+                        title = result.article.title || filename;
+                        textContent = result.article.textContent;
+                    } else {
+                        title = filename;
+                        textContent = content;
+                    }
+                }
+
+                const addedBook = await processAndSaveBook(title, textContent, `file://${filename}`);
+                sendResponse({ success: true, book: addedBook });
+
+            } catch (error) {
+                console.error('[Kuato] Failed to load file:', error);
                 sendResponse({ success: false, error: error.message });
             }
         })();
