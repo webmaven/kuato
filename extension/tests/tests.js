@@ -6,6 +6,35 @@
  */
 
 // --- Mocks and Test Harness ---
+
+// Mock window.fetch to handle data URLs, which are used in the PDF loading test.
+// The browser's native fetch doesn't support data URLs, so we intercept them.
+const originalFetch = window.fetch;
+window.fetch = function(url, options) {
+    if (typeof url === 'string' && url.startsWith('data:')) {
+        const [header, base64Data] = url.split(',');
+
+        // Decode base64 string to ArrayBuffer
+        const binaryStr = atob(base64Data);
+        const len = binaryStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+        }
+
+        const mockResponse = {
+            ok: true,
+            status: 200,
+            arrayBuffer: () => Promise.resolve(bytes.buffer),
+        };
+
+        return Promise.resolve(mockResponse);
+    }
+
+    // For all other requests, use the real fetch
+    return originalFetch.apply(this, arguments);
+};
+
 // Mock Readability for offscreen parsing tests
 window.Readability = class {
     constructor(doc) { this.doc = doc; }
