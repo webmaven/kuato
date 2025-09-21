@@ -70,5 +70,29 @@ async function handleMessages(request, sender, sendResponse) {
     return true;
   }
 
+  if (request.action === 'parseEpub') {
+    const { epubData } = request;
+    (async () => {
+        try {
+            const book = ePub({ bookPath: epubData });
+            const metadata = await book.loaded.metadata;
+            const title = metadata.title;
+
+            let fullText = '';
+            for (const section of book.spine.items) {
+                const doc = await section.load(book.load.bind(book));
+                const text = doc.body.textContent || "";
+                fullText += text + '\n\n';
+            }
+
+            sendResponse({ success: true, title: title, textContent: fullText.trim() });
+        } catch (error) {
+            console.error('[Kuato Offscreen] Error parsing EPUB:', error);
+            sendResponse({ success: false, error: error.message });
+        }
+    })();
+    return true;
+  }
+
   return false;
 }

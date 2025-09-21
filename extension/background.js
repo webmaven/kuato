@@ -208,6 +208,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     if (!result.success) throw new Error(result.error);
                     title = new URL(url).pathname.split('/').pop() || 'Untitled PDF';
                     textContent = result.textContent;
+                } else if (contentType.includes('application/epub+zip')) {
+                    const epubData = await response.arrayBuffer();
+                    await setupOffscreenDocument('offscreen.html');
+                    const result = await chrome.runtime.sendMessage({
+                        action: 'parseEpub',
+                        target: 'offscreen',
+                        epubData: epubData
+                    });
+
+                    if (!result.success) throw new Error(result.error);
+                    title = result.title || new URL(url).pathname.split('/').pop() || 'Untitled EPUB';
+                    textContent = result.textContent;
                 } else {
                     const rawText = await response.text();
                     title = new URL(url).pathname.split('/').pop() || 'Untitled Text';
@@ -231,7 +243,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             try {
                 let title, textContent;
 
-                if (encoding === 'dataURL') {
+                const isEpub = filename.toLowerCase().endsWith('.epub');
+
+                if (isEpub) {
+                    const response = await fetch(content);
+                    const epubData = await response.arrayBuffer();
+
+                    await setupOffscreenDocument('offscreen.html');
+                    const result = await chrome.runtime.sendMessage({
+                        action: 'parseEpub',
+                        target: 'offscreen',
+                        epubData: epubData
+                    });
+
+                    if (!result.success) throw new Error(result.error);
+                    title = result.title || filename;
+                    textContent = result.textContent;
+                }
+                else if (encoding === 'dataURL') {
                     // It's a PDF file
                     const response = await fetch(content);
                     const pdfData = await response.arrayBuffer();

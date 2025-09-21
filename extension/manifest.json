@@ -24,7 +24,9 @@
     {
       "resources": [
         "lib/pdfjs/pdf.worker.mjs",
-        "lib/pdfjs/cmaps/*"
+        "lib/pdfjs/cmaps/*",
+        "lib/epubjs/epub.min.js",
+        "lib/epubjs/jszip.min.js"
       ],
       "matches": [
         "<all_urls>"
