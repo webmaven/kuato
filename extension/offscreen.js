@@ -74,7 +74,7 @@ async function handleMessages(request, sender, sendResponse) {
     const { epubData } = request;
     (async () => {
         try {
-            const book = globalThis.ePub(epubData);
+            const book = ePub(epubData);
             const metadata = await book.loaded.metadata;
             const title = metadata.title;
 
