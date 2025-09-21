@@ -74,7 +74,7 @@ async function handleMessages(request, sender, sendResponse) {
     const { epubData } = request;
     (async () => {
         try {
-            const book = window.ePub.default({ bookPath: epubData });
+            const book = globalThis.ePub({ bookPath: epubData });
             const metadata = await book.loaded.metadata;
             const title = metadata.title;
 
@@ -84,7 +84,7 @@ async function handleMessages(request, sender, sendResponse) {
                 const text = doc.body.textContent || "";
                 fullText += text + '\n\n';
             }
-
+            
             sendResponse({ success: true, title: title, textContent: fullText.trim() });
         } catch (error) {
             console.error('[Kuato Offscreen] Error parsing EPUB:', error);
