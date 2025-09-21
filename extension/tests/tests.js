@@ -85,6 +85,19 @@ var chrome = {
             return Promise.resolve([]);
         },
         getURL: (path) => `chrome-extension://mock-id/${path}`,
+        // This is the actual function the background script calls to send a message.
+        sendMessage: (request) => {
+            if (request.target === 'offscreen') {
+                if (request.action === 'parseHtml') {
+                    const article = new Readability(null).parse();
+                    return Promise.resolve({ success: true, article });
+                }
+                if (request.action === 'parsePdf') {
+                    return Promise.resolve({ success: true, textContent: 'This is mock PDF text.' });
+                }
+            }
+            return Promise.reject(new Error('Message could not be handled by mock sendMessage.'));
+        },
         // Helper to simulate a message event for tests
         _sendMessage: (request, sender, sendResponse) => {
             // Simulate the background script sending a message to the offscreen script
