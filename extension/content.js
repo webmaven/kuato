@@ -27,27 +27,14 @@ function createKuatoPanel() {
   const panel = document.createElement('div');
   panel.id = 'kuato-panel';
   panel.innerHTML = `
-    <h3>"Open your mind..." - Kuato</h3>
-    <div class="kuato-section">
-      <label for="kuato-library-select">Select Book:</label>
-      <div style="display: flex; gap: 5px;">
-        <select id="kuato-library-select" style="width: 100%;">
-          <option value="">-- No book selected --</option>
-        </select>
-        <button id="kuato-rename-book" style="width: auto;">Rename</button>
-      </div>
-    </div>
-    <div class="kuato-section">
-      <div style="display: flex; gap: 5px;">
-        <button id="kuato-load-url">From URL</button>
-        <button id="kuato-load-file">From File</button>
-      </div>
-      <input type="file" id="kuato-file-input" style="display: none;" />
+    <div class="kuato-header">
+      <h3>"Open your mind..." - Kuato</h3>
+      <button id="kuato-toggle-collapse" title="Collapse Panel">[-]</button>
     </div>
     <div id="kuato-collapsible-content">
         <div class="kuato-section">
-          <label for="kuato-library-select">Select Book:</label>
-          <div style="display: flex; gap: 5px;">
+          <div style="display: flex; gap: 5px; align-items: center;">
+            <label for="kuato-library-select" style="flex-shrink: 0;">Select Book:</label>
             <select id="kuato-library-select" style="width: 100%;">
               <option value="">-- No book selected --</option>
             </select>
@@ -96,7 +83,7 @@ function addKuatoPanelStyles() {
         #kuato-panel.kuato-collapsed #kuato-collapsible-content {
             display: none;
         }
-        .kuato-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .kuato-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; }
         #kuato-panel h3, #kuato-panel h4 { margin: 0; color: #111; }
         #kuato-toggle-collapse {
             width: 24px; height: 24px; padding: 0;
@@ -443,9 +430,6 @@ function initializeKuato() {
 
     toggleButton.addEventListener('click', () => togglePanel());
 
-    // Collapse panel by default
-    togglePanel(true);
-
     const librarySelect = document.getElementById('kuato-library-select');
     librarySelect.addEventListener('change', () => {
         const bookId = librarySelect.value;
@@ -454,17 +438,14 @@ function initializeKuato() {
                 if (response && response.success && response.book) {
                     currentBook = response.book;
                     renderBookInfo();
-                    togglePanel(false); // Expand panel when a book is selected
                 } else {
                     currentBook = null;
                     document.getElementById('kuato-book-info').style.display = 'none';
-                    togglePanel(true); // Collapse if book fails to load
                 }
             });
         } else {
             currentBook = null;
             document.getElementById('kuato-book-info').style.display = 'none';
-            togglePanel(true); // Collapse when no book is selected
         }
     });
 
