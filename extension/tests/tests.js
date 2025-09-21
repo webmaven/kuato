@@ -246,9 +246,10 @@ function runUnitTests() {
         const book = await processAndSaveBook('Test Title', text, 'url');
 
         // Assert
-        assert(book.chunks.length === 2, 'Should split into 2 chunks');
-        assertDeepEqual(book.chunks[0].content, 'This is the first sentence. This is the second.', 'First chunk should end at a word break');
-        assertDeepEqual(book.chunks[1].content, 'sentence. This is a very long third sentence that will be split.', 'Second chunk should contain the rest');
+        assert(book.chunks.length === 3, 'Should split into 3 chunks by sentence');
+        assertDeepEqual(book.chunks[0].content, 'This is the first sentence.', 'First chunk is the first sentence');
+        assertDeepEqual(book.chunks[1].content, 'This is the second sentence.', 'Second chunk is the second sentence');
+        assertDeepEqual(book.chunks[2].content, 'This is a very long third sentence that will be split.', 'Third chunk is the rest of the text');
         done();
     });
 
@@ -372,7 +373,7 @@ function runUnitTests() {
 
     test('addBook should add a new book to the library', async (done) => {
         // Arrange
-        chrome.storage.local.clear(() => {});
+        await new Promise(res => chrome.storage.local.clear(res));
         const newBook = { title: 'Test Book', chunks: [] };
 
         // Act
@@ -380,18 +381,20 @@ function runUnitTests() {
 
         // Assert
         assert(addedBook.id.startsWith('book_'), 'Book should be given an ID');
-
         const library = await getLibrary();
         assert(library.length === 1, 'Library should have one book');
-        assertDeepEqual(library[0].title, 'Test Book', 'The correct book should be in the library');
+        assertDeepEqual(library[0].title, 'Test Book', 'The correct book title should be in the library');
 
         done();
     });
 
     test('getBook should retrieve a specific book by ID', async (done) => {
         // Arrange
-        chrome.storage.local.clear(() => {});
+        await new Promise(res => chrome.storage.local.clear(res));
+
         const book1 = await addBook({ title: 'Book One' });
+        // Add a small delay to ensure the timestamp-based ID is unique for the next book.
+        await new Promise(resolve => setTimeout(resolve, 10));
         const book2 = await addBook({ title: 'Book Two' });
 
         // Act
