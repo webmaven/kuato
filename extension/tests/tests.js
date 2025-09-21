@@ -246,10 +246,11 @@ function runUnitTests() {
         const book = await processAndSaveBook('Test Title', text, 'url');
 
         // Assert
-        assert(book.chunks.length === 3, 'Should split into 3 chunks by sentence');
+        assert(book.chunks.length === 4, 'Should split into 4 chunks based on sentence and word boundaries');
         assertDeepEqual(book.chunks[0].content, 'This is the first sentence.', 'First chunk is the first sentence');
         assertDeepEqual(book.chunks[1].content, 'This is the second sentence.', 'Second chunk is the second sentence');
-        assertDeepEqual(book.chunks[2].content, 'This is a very long third sentence that will be split.', 'Third chunk is the rest of the text');
+        assertDeepEqual(book.chunks[2].content, 'This is a very long third sentence that will be', 'Third chunk is split at a word boundary');
+        assertDeepEqual(book.chunks[3].content, 'split.', 'Fourth chunk is the remainder');
         done();
     });
 
