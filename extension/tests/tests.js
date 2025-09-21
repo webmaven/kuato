@@ -305,7 +305,7 @@ function runUnitTests() {
             action: 'loadFile',
             filename: 'test.pdf',
             encoding: 'dataURL',
-            content: 'data:application/pdf;base64,dummydata' // The content is a mock data URL
+            content: 'data:application/pdf;base64,dGVzdA==' // The content is a valid (but tiny) base64 string.
         };
 
         // Act
