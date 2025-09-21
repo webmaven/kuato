@@ -245,6 +245,7 @@ function runUnitTests() {
     test('loadFile message should process a plain text file', async (done) => {
         // Arrange
         await new Promise(res => chrome.storage.local.clear(res));
+        await saveSettings({ chunkSize: 1000 }); // Ensure settings exist
         const request = {
             action: 'loadFile',
             filename: 'test.txt',
@@ -270,6 +271,7 @@ function runUnitTests() {
     test('loadFile message should process a PDF file using offscreen parser', async (done) => {
         // Arrange
         await new Promise(res => chrome.storage.local.clear(res));
+        await saveSettings({ chunkSize: 1000 }); // Ensure settings exist
         const request = {
             action: 'loadFile',
             filename: 'test.pdf',
@@ -294,6 +296,7 @@ function runUnitTests() {
     test('loadFile message should process an HTML file using offscreen parser', async (done) => {
         // Arrange
         await new Promise(res => chrome.storage.local.clear(res));
+        await saveSettings({ chunkSize: 1000 }); // Ensure settings exist
         const request = {
             action: 'loadFile',
             filename: 'test.html',
