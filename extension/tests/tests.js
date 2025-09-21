@@ -80,6 +80,10 @@ var chrome = {
                 // For now, a no-op is sufficient to prevent errors.
             }
         },
+        getContexts: (options) => {
+            // For hasOffscreenDocument check. Assume no document exists.
+            return Promise.resolve([]);
+        },
         getURL: (path) => `chrome-extension://mock-id/${path}`,
         // Helper to simulate a message event for tests
         _sendMessage: (request, sender, sendResponse) => {
@@ -146,6 +150,12 @@ var chrome = {
         // This is a simplified mock. A real implementation would be more complex.
         if (chrome.runtime.onInstalled && chrome.runtime.onInstalled.hasListeners()) {
             chrome.runtime.onInstalled.dispatch();
+        }
+    },
+    offscreen: {
+        createDocument: (options) => {
+            // Simulate document creation by just resolving the promise.
+            return Promise.resolve();
         }
     }
 };
