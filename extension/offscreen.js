@@ -72,3 +72,6 @@ async function handleMessages(request, sender, sendResponse) {
 
   return false;
 }
+
+// Signal to the background script that the offscreen document is ready.
+chrome.runtime.sendMessage({ action: 'offscreenReady' });

@@ -70,41 +70,46 @@ async function updateBook(bookId, updatedData) {
 // --- Offscreen Document Management ---
 
 const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
-
-// A global promise to avoid race conditions
-let creating;
-
-async function hasOffscreenDocument() {
-    // Check all existing contexts for an offscreen document.
-    if (chrome.runtime.getContexts) {
-        const contexts = await chrome.runtime.getContexts({
-            contextTypes: ['OFFSCREEN_DOCUMENT']
-        });
-        return !!contexts.length;
-    } else {
-        // Fallback for older Chrome versions.
-        const views = chrome.extension.getViews({ type: 'OFFSCREEN_DOCUMENT' });
-        return views.length > 0;
-    }
-}
+let readyPromise = null;
+let resolveReadyPromise = null;
 
 async function setupOffscreenDocument() {
-    // If we do not have an offscreen document, create one.
-    if (!(await hasOffscreenDocument())) {
-        // createDocument may throw if another offscreen document is already being created.
-        // We can ignore this error since we only ever create the same document.
+    if (readyPromise) {
+        return readyPromise;
+    }
+
+    readyPromise = new Promise((resolve) => {
+        resolveReadyPromise = resolve;
+    });
+
+    const existingContexts = await chrome.runtime.getContexts({
+        contextTypes: ['OFFSCREEN_DOCUMENT']
+    });
+
+    if (existingContexts.length > 0) {
+        // If a document exists, we assume it's ready. If not, the subsequent
+        // message send will fail, and the document will be cleaned up.
+        resolveReadyPromise();
+    } else {
         await chrome.offscreen.createDocument({
             url: OFFSCREEN_DOCUMENT_PATH,
             reasons: ['DOM_PARSER'],
             justification: 'To parse HTML and PDF content.',
-        }).catch(() => {});
+        });
     }
+
+    return readyPromise;
 }
 
 async function closeOffscreenDocument() {
-    if (await hasOffscreenDocument()) {
+    const existingContexts = await chrome.runtime.getContexts({
+        contextTypes: ['OFFSCREEN_DOCUMENT']
+    });
+    if (existingContexts.length > 0) {
         await chrome.offscreen.closeDocument();
     }
+    readyPromise = null;
+    resolveReadyPromise = null;
 }
 
 // --- Main Logic ---
@@ -178,46 +183,46 @@ async function processAndSaveBook(title, textContent, sourceUrl) {
 // --- Message Listener ---
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // Handle the readiness signal from the offscreen document.
+    if (request.action === 'offscreenReady') {
+        if (resolveReadyPromise) {
+            resolveReadyPromise();
+        }
+        return false; // No need to keep the channel open.
+    }
+
     if (request.action === 'loadUrl') {
         const url = request.url;
         (async () => {
-            let title, textContent;
+            let needsOffscreen = false;
             try {
                 const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error(`Network request failed with status ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`Network request failed: ${response.status}`);
 
                 const contentType = response.headers.get('content-type') || '';
+                let title, textContent;
 
-                if (contentType.includes('text/html')) {
-                    const rawText = await response.text();
+                if (contentType.includes('text/html') || contentType.includes('application/pdf')) {
+                    needsOffscreen = true;
                     await setupOffscreenDocument();
-                    const result = await chrome.runtime.sendMessage({
-                        action: 'parseHtml',
-                        target: 'offscreen',
-                        html: rawText
-                    });
 
-                    if (!result.success) throw new Error(result.error);
-                    title = result.article.title;
-                    textContent = result.article.textContent;
-                } else if (contentType.includes('application/pdf')) {
-                    const pdfData = await response.arrayBuffer();
-                    await setupOffscreenDocument();
-                    const result = await chrome.runtime.sendMessage({
-                        action: 'parsePdf',
-                        target: 'offscreen',
-                        pdfData: pdfData
-                    });
-
-                    if (!result.success) throw new Error(result.error);
-                    title = new URL(url).pathname.split('/').pop() || 'Untitled PDF';
-                    textContent = result.textContent;
+                    if (contentType.includes('text/html')) {
+                        const rawText = await response.text();
+                        const result = await chrome.runtime.sendMessage({ action: 'parseHtml', target: 'offscreen', html: rawText });
+                        if (!result.success) throw new Error(result.error);
+                        title = result.article.title;
+                        textContent = result.article.textContent;
+                    } else { // PDF
+                        const pdfData = await response.arrayBuffer();
+                        const result = await chrome.runtime.sendMessage({ action: 'parsePdf', target: 'offscreen', pdfData: pdfData });
+                        if (!result.success) throw new Error(result.error);
+                        title = new URL(url).pathname.split('/').pop() || 'Untitled PDF';
+                        textContent = result.textContent;
+                    }
                 } else {
-                    const rawText = await response.text();
+                    // Plain text
+                    textContent = await response.text();
                     title = new URL(url).pathname.split('/').pop() || 'Untitled Text';
-                    textContent = rawText;
                 }
 
                 const addedBook = await processAndSaveBook(title, textContent, url);
@@ -227,51 +232,44 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 console.error('[Kuato] Failed to load URL:', error);
                 sendResponse({ success: false, error: error.message });
             } finally {
-                await closeOffscreenDocument();
+                if (needsOffscreen) {
+                    await closeOffscreenDocument();
+                }
             }
         })();
-        return true; // Indicates asynchronous response
+        return true;
     }
 
     if (request.action === 'loadFile') {
         const { filename, encoding, content } = request;
         (async () => {
-            let title, textContent;
+            let needsOffscreen = false;
             try {
-                if (encoding === 'dataURL') {
-                    // It's a PDF file
-                    const response = await fetch(content);
-                    const pdfData = await response.arrayBuffer();
+                let title, textContent;
+                const isPdf = filename.toLowerCase().endsWith('.pdf');
+                const isHtml = filename.toLowerCase().endsWith('.html') || filename.toLowerCase().endsWith('.htm');
 
+                if (isPdf || isHtml) {
+                    needsOffscreen = true;
                     await setupOffscreenDocument();
-                    const result = await chrome.runtime.sendMessage({
-                        action: 'parsePdf',
-                        target: 'offscreen',
-                        pdfData: pdfData
-                    });
 
-                    if (!result.success) throw new Error(result.error);
-                    title = filename;
-                    textContent = result.textContent;
-
-                } else {
-                    // It's a text-based file (HTML or TXT)
-                    const isHtml = filename.toLowerCase().endsWith('.html') || filename.toLowerCase().endsWith('.htm');
-                    if (isHtml) {
-                        await setupOffscreenDocument();
-                        const result = await chrome.runtime.sendMessage({
-                            action: 'parseHtml',
-                            target: 'offscreen',
-                            html: content
-                        });
-
+                    if (isPdf) {
+                        const response = await fetch(content); // content is a dataURL
+                        const pdfData = await response.arrayBuffer();
+                        const result = await chrome.runtime.sendMessage({ action: 'parsePdf', target: 'offscreen', pdfData: pdfData });
+                        if (!result.success) throw new Error(result.error);
+                        title = filename;
+                        textContent = result.textContent;
+                    } else { // HTML
+                        const result = await chrome.runtime.sendMessage({ action: 'parseHtml', target: 'offscreen', html: content });
                         if (!result.success) throw new Error(result.error);
                         title = result.article.title || filename;
                         textContent = result.article.textContent;
-                    } else {
-                        title = filename;
-                        textContent = content;
                     }
+                } else {
+                    // Plain text
+                    title = filename;
+                    textContent = content;
                 }
 
                 const addedBook = await processAndSaveBook(title, textContent, `file://${filename}`);
@@ -281,13 +279,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 console.error('[Kuato] Failed to load file:', error);
                 sendResponse({ success: false, error: error.message });
             } finally {
-                await closeOffscreenDocument();
+                if (needsOffscreen) {
+                    await closeOffscreenDocument();
+                }
             }
         })();
-        return true; // Indicates asynchronous response
+        return true;
     }
     
-    // Keep other message handlers
+    // Keep other message handlers...
     if (request.action === 'getLibrary') {
         getLibrary().then(library => sendResponse({ success: true, library }));
         return true;

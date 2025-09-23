@@ -81,12 +81,16 @@ var chrome = {
             }
         },
         getContexts: (options) => {
-            // For hasOffscreenDocument check. Assume no document exists.
+            // For hasOffscreenDocument check.
+            if (chrome.offscreen._hasDocument) {
+                return Promise.resolve([ { contextType: 'OFFSCREEN_DOCUMENT' } ]);
+            }
             return Promise.resolve([]);
         },
         getURL: (path) => `chrome-extension://mock-id/${path}`,
         // This is the actual function the background script calls to send a message.
         sendMessage: (request) => {
+            // This mock is for when the background script sends a message to the offscreen script.
             if (request.target === 'offscreen') {
                 if (request.action === 'parseHtml') {
                     const article = new Readability(null).parse();
@@ -96,30 +100,26 @@ var chrome = {
                     return Promise.resolve({ success: true, textContent: 'This is mock PDF text.' });
                 }
             }
-            return Promise.reject(new Error('Message could not be handled by mock sendMessage.'));
+            // For other messages, we assume they are handled by the listener.
+            return new Promise((resolve, reject) => {
+                chrome.runtime._sendMessage(request, {}, (response) => {
+                    resolve(response);
+                });
+            });
         },
         // Helper to simulate a message event for tests
         _sendMessage: (request, sender, sendResponse) => {
-            // Simulate the background script sending a message to the offscreen script
-            if (request.action === 'parseHtml') {
-                const article = new Readability(null).parse();
-                sendResponse({ success: true, article });
-                return;
-            }
-            if (request.action === 'parsePdf') {
-                sendResponse({ success: true, textContent: 'This is mock PDF text.' });
-                return;
-            }
-
-            // Simulate content script sending a message to the background script
-            chrome.runtime._listeners.forEach(listener => {
-                // The background listener is what we are testing.
-                // We assume it's the one that doesn't have a target, or the target is not 'offscreen'
-                const isBackgroundListener = !sender.tab;
-                if(isBackgroundListener) {
-                    listener(request, sender, sendResponse);
-                }
+            // Find a listener that can handle this message.
+            const handled = chrome.runtime._listeners.some(listener => {
+                const result = listener(request, sender, sendResponse);
+                // Return true if the listener will respond asynchronously.
+                return result === true;
             });
+
+            if (!handled) {
+                // If no listener handled the message (e.g. for 'offscreenReady'),
+                // we don't need to do anything else.
+            }
         }
     },
     storage: {
@@ -166,8 +166,20 @@ var chrome = {
         }
     },
     offscreen: {
+        _hasDocument: false,
         createDocument: (options) => {
-            // Simulate document creation by just resolving the promise.
+            return new Promise(resolve => {
+                chrome.offscreen._hasDocument = true;
+                // Simulate the offscreen document sending the 'ready' message
+                // after a brief delay to make the test more realistic.
+                setTimeout(() => {
+                    chrome.runtime._sendMessage({ action: 'offscreenReady' }, {}, () => {});
+                }, 0);
+                resolve();
+            });
+        },
+        closeDocument: () => {
+            chrome.offscreen._hasDocument = false;
             return Promise.resolve();
         }
     }
@@ -403,6 +415,29 @@ function runUnitTests() {
 
         // Assert
         assertDeepEqual(retrievedBook.title, 'Book Two', 'Should retrieve the correct book by its ID');
+
+        done();
+    });
+
+    test('setupOffscreenDocument should wait for the ready signal', async (done) => {
+        // Arrange
+        let promiseResolved = false;
+
+        // Act
+        const promise = setupOffscreenDocument();
+
+        // Assert right away that the promise hasn't resolved yet.
+        assert(promiseResolved === false, 'Promise should not resolve synchronously.');
+
+        promise.then(() => {
+            promiseResolved = true;
+        });
+
+        // Give the setTimeout in the mock a chance to run
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Assert that the promise has now resolved.
+        assert(promiseResolved === true, 'Promise should resolve after the ready signal.');
 
         done();
     });
