@@ -254,8 +254,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     await setupOffscreenDocument();
 
                     if (isPdf) {
-                        const response = await fetch(content); // content is a dataURL
-                        const pdfData = await response.arrayBuffer();
+                        // Manually decode the base64 data URL. The fetch() API in service workers
+                        // does not reliably handle data URLs.
+                        const base64Data = content.split(',')[1];
+                        const binaryStr = atob(base64Data);
+                        const len = binaryStr.length;
+                        const pdfData = new Uint8Array(len);
+                        for (let i = 0; i < len; i++) {
+                            pdfData[i] = binaryStr.charCodeAt(i);
+                        }
+
                         const result = await chrome.runtime.sendMessage({ action: 'parsePdf', target: 'offscreen', pdfData: pdfData });
                         if (!result.success) throw new Error(result.error);
                         title = filename;
