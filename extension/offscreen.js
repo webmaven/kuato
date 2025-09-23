@@ -38,7 +38,14 @@ async function handleMessages(request, sender, sendResponse) {
   }
 
   if (request.action === 'parsePdf') {
+    console.log('[Kuato Offscreen] Received parsePdf request:', request);
     const { pdfData } = request;
+    console.log('[Kuato Offscreen] Extracted pdfData:', pdfData);
+    console.log('[Kuato Offscreen] Type of pdfData:', typeof pdfData);
+    if (pdfData) {
+      console.log('[Kuato Offscreen] pdfData.byteLength:', pdfData.byteLength);
+    }
+
     (async () => {
         try {
             const { pdfjsLib } = globalThis;

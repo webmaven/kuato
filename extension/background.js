@@ -254,6 +254,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     await setupOffscreenDocument();
 
                     if (isPdf) {
+                        console.log('[Kuato BG] Received dataURL for PDF:', content.substring(0, 100));
                         // Manually decode the base64 data URL. The fetch() API in service workers
                         // does not reliably handle data URLs.
                         const base64Data = content.split(',')[1];
@@ -263,6 +264,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         for (let i = 0; i < len; i++) {
                             pdfData[i] = binaryStr.charCodeAt(i);
                         }
+                        console.log('[Kuato BG] Decoded PDF data:', pdfData);
 
                         const result = await chrome.runtime.sendMessage({ action: 'parsePdf', target: 'offscreen', pdfData: pdfData });
                         if (!result.success) throw new Error(result.error);
