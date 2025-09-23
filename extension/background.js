@@ -69,36 +69,42 @@ async function updateBook(bookId, updatedData) {
 
 // --- Offscreen Document Management ---
 
-let creating; // A global promise to avoid race conditions
+const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
 
-async function hasOffscreenDocument(path) {
-  if (chrome.runtime.getContexts) {
-      const contexts = await chrome.runtime.getContexts({
-          contextTypes: ['OFFSCREEN_DOCUMENT'],
-          documentUrls: [path]
-      });
-      return !!contexts.length;
-  } else {
-      // Fallback for older Chrome versions
-      const views = chrome.extension.getViews({ type: 'OFFSCREEN_DOCUMENT' });
-      return views.some(view => view.location.href === path);
-  }
+// A global promise to avoid race conditions
+let creating;
+
+async function hasOffscreenDocument() {
+    // Check all existing contexts for an offscreen document.
+    if (chrome.runtime.getContexts) {
+        const contexts = await chrome.runtime.getContexts({
+            contextTypes: ['OFFSCREEN_DOCUMENT']
+        });
+        return !!contexts.length;
+    } else {
+        // Fallback for older Chrome versions.
+        const views = chrome.extension.getViews({ type: 'OFFSCREEN_DOCUMENT' });
+        return views.length > 0;
+    }
 }
 
-async function setupOffscreenDocument(path) {
-  if (creating) {
-    await creating;
-  } else {
-    if (!(await hasOffscreenDocument(path))) {
-      creating = chrome.offscreen.createDocument({
-        url: path,
-        reasons: ['DOM_PARSER'],
-        justification: 'To parse HTML content from fetched URLs.',
-      });
-      await creating;
-      creating = null;
+async function setupOffscreenDocument() {
+    // If we do not have an offscreen document, create one.
+    if (!(await hasOffscreenDocument())) {
+        // createDocument may throw if another offscreen document is already being created.
+        // We can ignore this error since we only ever create the same document.
+        await chrome.offscreen.createDocument({
+            url: OFFSCREEN_DOCUMENT_PATH,
+            reasons: ['DOM_PARSER'],
+            justification: 'To parse HTML and PDF content.',
+        }).catch(() => {});
     }
-  }
+}
+
+async function closeOffscreenDocument() {
+    if (await hasOffscreenDocument()) {
+        await chrome.offscreen.closeDocument();
+    }
 }
 
 // --- Main Logic ---
@@ -175,6 +181,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'loadUrl') {
         const url = request.url;
         (async () => {
+            let title, textContent;
             try {
                 const response = await fetch(url);
                 if (!response.ok) {
@@ -182,11 +189,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 }
 
                 const contentType = response.headers.get('content-type') || '';
-                let title, textContent;
 
                 if (contentType.includes('text/html')) {
                     const rawText = await response.text();
-                    await setupOffscreenDocument('offscreen.html');
+                    await setupOffscreenDocument();
                     const result = await chrome.runtime.sendMessage({
                         action: 'parseHtml',
                         target: 'offscreen',
@@ -198,7 +204,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     textContent = result.article.textContent;
                 } else if (contentType.includes('application/pdf')) {
                     const pdfData = await response.arrayBuffer();
-                    await setupOffscreenDocument('offscreen.html');
+                    await setupOffscreenDocument();
                     const result = await chrome.runtime.sendMessage({
                         action: 'parsePdf',
                         target: 'offscreen',
@@ -220,6 +226,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             } catch (error) {
                 console.error('[Kuato] Failed to load URL:', error);
                 sendResponse({ success: false, error: error.message });
+            } finally {
+                await closeOffscreenDocument();
             }
         })();
         return true; // Indicates asynchronous response
@@ -228,15 +236,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'loadFile') {
         const { filename, encoding, content } = request;
         (async () => {
+            let title, textContent;
             try {
-                let title, textContent;
-
                 if (encoding === 'dataURL') {
                     // It's a PDF file
                     const response = await fetch(content);
                     const pdfData = await response.arrayBuffer();
 
-                    await setupOffscreenDocument('offscreen.html');
+                    await setupOffscreenDocument();
                     const result = await chrome.runtime.sendMessage({
                         action: 'parsePdf',
                         target: 'offscreen',
@@ -251,7 +258,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     // It's a text-based file (HTML or TXT)
                     const isHtml = filename.toLowerCase().endsWith('.html') || filename.toLowerCase().endsWith('.htm');
                     if (isHtml) {
-                        await setupOffscreenDocument('offscreen.html');
+                        await setupOffscreenDocument();
                         const result = await chrome.runtime.sendMessage({
                             action: 'parseHtml',
                             target: 'offscreen',
@@ -273,6 +280,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             } catch (error) {
                 console.error('[Kuato] Failed to load file:', error);
                 sendResponse({ success: false, error: error.message });
+            } finally {
+                await closeOffscreenDocument();
             }
         })();
         return true; // Indicates asynchronous response
