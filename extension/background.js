@@ -232,9 +232,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 console.error('[Kuato] Failed to load URL:', error);
                 sendResponse({ success: false, error: error.message });
             } finally {
-                // if (needsOffscreen) {
-                //     await closeOffscreenDocument();
-                // }
+                if (needsOffscreen) {
+                    await closeOffscreenDocument();
+                }
             }
         })();
         return true;
@@ -254,19 +254,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     await setupOffscreenDocument();
 
                     if (isPdf) {
-                        console.log('[Kuato BG] Received dataURL for PDF:', content.substring(0, 100));
-                        // Manually decode the base64 data URL. The fetch() API in service workers
-                        // does not reliably handle data URLs.
-                        const base64Data = content.split(',')[1];
-                        const binaryStr = atob(base64Data);
-                        const len = binaryStr.length;
-                        const pdfData = new Uint8Array(len);
-                        for (let i = 0; i < len; i++) {
-                            pdfData[i] = binaryStr.charCodeAt(i);
-                        }
-                        console.log('[Kuato BG] Decoded PDF data:', pdfData);
-
-                        const result = await chrome.runtime.sendMessage({ action: 'parsePdf', target: 'offscreen', pdfData: pdfData });
+                        // Pass the dataURL directly to the offscreen document.
+                        // The binary data gets corrupted during the message passing.
+                        const result = await chrome.runtime.sendMessage({ action: 'parsePdf', target: 'offscreen', pdfDataUrl: content });
                         if (!result.success) throw new Error(result.error);
                         title = filename;
                         textContent = result.textContent;
@@ -289,9 +279,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 console.error('[Kuato] Failed to load file:', error);
                 sendResponse({ success: false, error: error.message });
             } finally {
-                // if (needsOffscreen) {
-                //     await closeOffscreenDocument();
-                // }
+                if (needsOffscreen) {
+                    await closeOffscreenDocument();
+                }
             }
         })();
         return true;

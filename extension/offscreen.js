@@ -38,16 +38,18 @@ async function handleMessages(request, sender, sendResponse) {
   }
 
   if (request.action === 'parsePdf') {
-    console.log('[Kuato Offscreen] Received parsePdf request:', request);
-    const { pdfData } = request;
-    console.log('[Kuato Offscreen] Extracted pdfData:', pdfData);
-    console.log('[Kuato Offscreen] Type of pdfData:', typeof pdfData);
-    if (pdfData) {
-      console.log('[Kuato Offscreen] pdfData.byteLength:', pdfData.byteLength);
-    }
-
+    const { pdfDataUrl } = request;
     (async () => {
         try {
+            // Decode the base64 data URL here, right before it's used.
+            const base64Data = pdfDataUrl.split(',')[1];
+            const binaryStr = atob(base64Data);
+            const len = binaryStr.length;
+            const pdfData = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                pdfData[i] = binaryStr.charCodeAt(i);
+            }
+
             const { pdfjsLib } = globalThis;
             pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdfjs/pdf.worker.mjs');
 
