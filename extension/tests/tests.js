@@ -90,17 +90,13 @@ var chrome = {
         getURL: (path) => `chrome-extension://mock-id/${path}`,
         // This is the actual function the background script calls to send a message.
         sendMessage: (request) => {
-            // This mock is for when the background script sends a message to the offscreen script.
+            // This mock now forwards messages to the appropriate handler.
             if (request.target === 'offscreen') {
-                if (request.action === 'parseHtml') {
-                    const article = new Readability(null).parse();
-                    return Promise.resolve({ success: true, article });
-                }
-                if (request.action === 'parsePdf') {
-                    return Promise.resolve({ success: true, textContent: 'This is mock PDF text.' });
-                }
+                return new Promise(resolve => {
+                    handleOffscreenMessages(request, {}, resolve);
+                });
             }
-            // For other messages, we assume they are handled by the listener.
+            // For other messages, we assume they are handled by the main listener.
             return new Promise((resolve, reject) => {
                 chrome.runtime._sendMessage(request, {}, (response) => {
                     resolve(response);
@@ -184,6 +180,37 @@ var chrome = {
         }
     }
 };
+
+
+// --- Mock Offscreen Document Handler ---
+
+// This function simulates the behavior of the real offscreen.js script.
+function handleOffscreenMessages(request, sender, sendResponse) {
+    if (request.action === 'parseHtml') {
+        const article = new Readability(null).parse();
+        sendResponse({ success: true, article });
+    } else if (request.action === 'parsePdf') {
+        try {
+            // Replicate the decoding logic from the real offscreen.js
+            const base64Data = request.pdfDataUrl.split(',')[1];
+            const binaryStr = atob(base64Data);
+            const len = binaryStr.length;
+            const pdfData = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                pdfData[i] = binaryStr.charCodeAt(i);
+            }
+
+            // In a real test, we'd pass this to the mocked pdf.js,
+            // but for this test, we just need to confirm the data arrived
+            // and was decoded without error. We'll return a mock success.
+            assert(pdfData.length > 0, "PDF data should be decoded in mock offscreen handler");
+            sendResponse({ success: true, textContent: 'This is mock PDF text from the new handler.' });
+
+        } catch (e) {
+            sendResponse({ success: false, error: e.message });
+        }
+    }
+}
 
 
 // --- Test Runner Setup ---
@@ -334,7 +361,7 @@ function runUnitTests() {
         });
     });
 
-    test('loadFile message should process a PDF file using offscreen parser', async (done) => {
+    test('loadFile message should process a PDF file using the full message flow', async (done) => {
         // Arrange
         await new Promise(res => chrome.storage.local.clear(res));
         await saveSettings({ chunkSize: 1000 }); // Ensure settings exist
@@ -342,15 +369,17 @@ function runUnitTests() {
             action: 'loadFile',
             filename: 'test.pdf',
             encoding: 'dataURL',
-            content: 'data:application/pdf;base64,dGVzdA==' // The content is a valid (but tiny) base64 string.
+            content: 'data:application/pdf;base64,dGVzdA==' // "test" in base64
         };
 
         // Act
+        // This now goes through the full background script logic, which calls
+        // the mocked sendMessage, which in turn calls the mocked handleOffscreenMessages.
         chrome.runtime._sendMessage(request, {}, async (response) => {
             // Assert
             assert(response.success, 'Response should be successful for .pdf file');
             assertDeepEqual(response.book.title, 'test.pdf', 'Book title should be the filename for PDF');
-            assertDeepEqual(response.book.chunks[0].content, 'This is mock PDF text.', 'Chunk content should be from mocked pdf.js');
+            assertDeepEqual(response.book.chunks[0].content, 'This is mock PDF text from the new handler.', 'Chunk content should be from the new mock handler');
 
             const library = await getLibrary();
             assert(library.length === 1, 'Book should be saved to the library');
