@@ -232,9 +232,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 console.error('[Kuato] Failed to load URL:', error);
                 sendResponse({ success: false, error: error.message });
             } finally {
-                if (needsOffscreen) {
-                    await closeOffscreenDocument();
-                }
+                // if (needsOffscreen) {
+                //     await closeOffscreenDocument();
+                // }
             }
         })();
         return true;
@@ -289,9 +289,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 console.error('[Kuato] Failed to load file:', error);
                 sendResponse({ success: false, error: error.message });
             } finally {
-                if (needsOffscreen) {
-                    await closeOffscreenDocument();
-                }
+                // if (needsOffscreen) {
+                //     await closeOffscreenDocument();
+                // }
             }
         })();
         return true;
