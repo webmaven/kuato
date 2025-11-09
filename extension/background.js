@@ -114,6 +114,16 @@ async function closeOffscreenDocument() {
 
 // --- Main Logic ---
 
+function arrayBufferToDataUrl(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return 'data:application/pdf;base64,' + btoa(binary);
+}
+
 async function processAndSaveBook(title, textContent, sourceUrl) {
     const settings = await getSettings();
     const chunkSize = settings.chunkSize || 2000;
@@ -213,8 +223,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         title = result.article.title;
                         textContent = result.article.textContent;
                     } else { // PDF
-                        const pdfData = await response.arrayBuffer();
-                        const result = await chrome.runtime.sendMessage({ action: 'parsePdf', target: 'offscreen', pdfData: pdfData });
+                        const pdfBuffer = await response.arrayBuffer();
+                        const pdfDataUrl = arrayBufferToDataUrl(pdfBuffer);
+                        const result = await chrome.runtime.sendMessage({ action: 'parsePdf', target: 'offscreen', pdfDataUrl: pdfDataUrl });
                         if (!result.success) throw new Error(result.error);
                         title = new URL(url).pathname.split('/').pop() || 'Untitled PDF';
                         textContent = result.textContent;
