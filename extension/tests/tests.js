@@ -35,6 +35,80 @@ window.fetch = function(url, options) {
     return originalFetch.apply(this, arguments);
 };
 
+// --- Test Suites ---
+
+// An array to hold all our test functions
+const tests = [];
+
+// Helper to define a new test case
+function test(name, fn) {
+    tests.push({ name, fn, type: 'unit' });
+}
+
+test('uploadToPastebin should use fars.ee by default', async (done) => {
+    // Arrange
+    await saveSettings({ pastebinService: 'fars.ee' });
+    const request = {
+        action: 'uploadToPastebin',
+        content: 'test content'
+    };
+
+    // Mock fetch for fars.ee
+    const originalFetch = window.fetch;
+    window.fetch = (url, options) => {
+        if (url.includes('fars.ee')) {
+            return Promise.resolve({
+                ok: true,
+                text: () => Promise.resolve('https://fars.ee/mock-url')
+            });
+        }
+        return originalFetch(url, options);
+    };
+
+    // Act
+    chrome.runtime._sendMessage(request, {}, (response) => {
+        // Assert
+        assert(response.success, 'Response should be successful');
+        assert(response.url.includes('fars.ee'), 'URL should be from fars.ee');
+
+        // Cleanup
+        window.fetch = originalFetch;
+        done();
+    });
+});
+
+test('uploadToPastebin should use dpaste.org when selected', async (done) => {
+    // Arrange
+    await saveSettings({ pastebinService: 'dpaste.org' });
+    const request = {
+        action: 'uploadToPastebin',
+        content: 'test content'
+    };
+
+    // Mock fetch for dpaste.org
+    const originalFetch = window.fetch;
+    window.fetch = (url, options) => {
+        if (url.includes('dpaste.org')) {
+            return Promise.resolve({
+                ok: true,
+                text: () => Promise.resolve('https://dpaste.org/mock-url')
+            });
+        }
+        return originalFetch(url, options);
+    };
+
+    // Act
+    chrome.runtime._sendMessage(request, {}, (response) => {
+        // Assert
+        assert(response.success, 'Response should be successful');
+        assert(response.url.includes('dpaste.org'), 'URL should be from dpaste.org');
+
+        // Cleanup
+        window.fetch = originalFetch;
+        done();
+    });
+});
+
 // Mock Readability for offscreen parsing tests
 window.Readability = class {
     constructor(doc) { this.doc = doc; }

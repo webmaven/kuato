@@ -320,22 +320,48 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
     if (request.action === 'uploadToPastebin') {
-        const formData = new FormData();
-        formData.append('c', request.content);
-        fetch('https://fars.ee/?u=1', { method: 'POST', body: formData })
-            .then(response => response.text())
-            .then(url => {
+        (async () => {
+            try {
+                const settings = await getSettings();
+                const service = settings.pastebinService || 'fars.ee';
+                let url;
+
+                if (service === 'dpaste.org') {
+                    const formData = new FormData();
+                    formData.append('content', request.content);
+                    formData.append('format', 'url'); // Ask for the URL directly
+                    const response = await fetch('https://dpaste.org/api/', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (!response.ok) {
+                        throw new Error(`dpaste.org API error: ${response.status} ${await response.text()}`);
+                    }
+                    url = await response.text();
+                } else { // Default to fars.ee
+                    const formData = new FormData();
+                    formData.append('c', request.content);
+                    const response = await fetch('https://fars.ee/?u=1', {
+                        method: 'POST',
+                        body: formData
+                    });
+                     if (!response.ok) {
+                        throw new Error(`fars.ee API error: ${response.status} ${await response.text()}`);
+                    }
+                    url = await response.text();
+                }
+
                 const trimmedUrl = url.trim();
                 if (trimmedUrl.startsWith('http')) {
                     sendResponse({ success: true, url: trimmedUrl });
                 } else {
-                    throw new Error(`Invalid response from pastebin: ${trimmedUrl}`);
+                    throw new Error(`Invalid response from ${service}: ${trimmedUrl}`);
                 }
-            })
-            .catch(error => {
-                console.error('Error uploading to pastebin:', error);
+            } catch (error) {
+                console.error(`Error uploading to pastebin (${(await getSettings()).pastebinService}):`, error);
                 sendResponse({ success: false, error: error.message });
-            });
+            }
+        })();
         return true;
     }
 });
