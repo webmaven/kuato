@@ -69,39 +69,60 @@ async function updateBook(bookId, updatedData) {
 
 // --- Offscreen Document Management ---
 
-let creating; // A global promise to avoid race conditions
+const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
+let readyPromise = null;
+let resolveReadyPromise = null;
 
-async function hasOffscreenDocument(path) {
-  if (chrome.runtime.getContexts) {
-      const contexts = await chrome.runtime.getContexts({
-          contextTypes: ['OFFSCREEN_DOCUMENT'],
-          documentUrls: [path]
-      });
-      return !!contexts.length;
-  } else {
-      // Fallback for older Chrome versions
-      const views = chrome.extension.getViews({ type: 'OFFSCREEN_DOCUMENT' });
-      return views.some(view => view.location.href === path);
-  }
+async function setupOffscreenDocument() {
+    if (readyPromise) {
+        return readyPromise;
+    }
+
+    readyPromise = new Promise((resolve) => {
+        resolveReadyPromise = resolve;
+    });
+
+    const existingContexts = await chrome.runtime.getContexts({
+        contextTypes: ['OFFSCREEN_DOCUMENT']
+    });
+
+    if (existingContexts.length > 0) {
+        // If a document exists, we assume it's ready. If not, the subsequent
+        // message send will fail, and the document will be cleaned up.
+        resolveReadyPromise();
+    } else {
+        await chrome.offscreen.createDocument({
+            url: OFFSCREEN_DOCUMENT_PATH,
+            reasons: ['DOM_PARSER'],
+            justification: 'To parse HTML, PDF, and EPUB content.',
+        });
+    }
+
+    return readyPromise;
 }
 
-async function setupOffscreenDocument(path) {
-  if (creating) {
-    await creating;
-  } else {
-    if (!(await hasOffscreenDocument(path))) {
-      creating = chrome.offscreen.createDocument({
-        url: path,
-        reasons: ['DOM_PARSER'],
-        justification: 'To parse HTML content from fetched URLs.',
-      });
-      await creating;
-      creating = null;
+async function closeOffscreenDocument() {
+    const existingContexts = await chrome.runtime.getContexts({
+        contextTypes: ['OFFSCREEN_DOCUMENT']
+    });
+    if (existingContexts.length > 0) {
+        await chrome.offscreen.closeDocument();
     }
-  }
+    readyPromise = null;
+    resolveReadyPromise = null;
 }
 
 // --- Main Logic ---
+
+function arrayBufferToDataUrl(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return 'data:application/pdf;base64,' + btoa(binary);
+}
 
 async function processAndSaveBook(title, textContent, sourceUrl) {
     const settings = await getSettings();
@@ -172,58 +193,53 @@ async function processAndSaveBook(title, textContent, sourceUrl) {
 // --- Message Listener ---
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // Handle the readiness signal from the offscreen document.
+    if (request.action === 'offscreenReady') {
+        if (resolveReadyPromise) {
+            resolveReadyPromise();
+        }
+        return false; // No need to keep the channel open.
+    }
+
     if (request.action === 'loadUrl') {
         const url = request.url;
         (async () => {
+            let needsOffscreen = false;
             try {
                 const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error(`Network request failed with status ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`Network request failed: ${response.status}`);
 
                 const contentType = response.headers.get('content-type') || '';
                 let title, textContent;
 
-                if (contentType.includes('text/html')) {
-                    const rawText = await response.text();
-                    await setupOffscreenDocument('offscreen.html');
-                    const result = await chrome.runtime.sendMessage({
-                        action: 'parseHtml',
-                        target: 'offscreen',
-                        html: rawText
-                    });
+                if (contentType.includes('text/html') || contentType.includes('application/pdf') || contentType.includes('application/epub+zip')) {
+                    needsOffscreen = true;
+                    await setupOffscreenDocument();
 
-                    if (!result.success) throw new Error(result.error);
-                    title = result.article.title;
-                    textContent = result.article.textContent;
-                } else if (contentType.includes('application/pdf')) {
-                    const pdfData = await response.arrayBuffer();
-                    await setupOffscreenDocument('offscreen.html');
-                    const result = await chrome.runtime.sendMessage({
-                        action: 'parsePdf',
-                        target: 'offscreen',
-                        pdfData: pdfData
-                    });
-
-                    if (!result.success) throw new Error(result.error);
-                    title = new URL(url).pathname.split('/').pop() || 'Untitled PDF';
-                    textContent = result.textContent;
-                } else if (contentType.includes('application/epub+zip')) {
-                    const epubData = await response.arrayBuffer();
-                    await setupOffscreenDocument('offscreen.html');
-                    const result = await chrome.runtime.sendMessage({
-                        action: 'parseEpub',
-                        target: 'offscreen',
-                        epubData: epubData
-                    });
-
-                    if (!result.success) throw new Error(result.error);
-                    title = result.title || new URL(url).pathname.split('/').pop() || 'Untitled EPUB';
-                    textContent = result.textContent;
+                    if (contentType.includes('text/html')) {
+                        const rawText = await response.text();
+                        const result = await chrome.runtime.sendMessage({ action: 'parseHtml', target: 'offscreen', html: rawText });
+                        if (!result.success) throw new Error(result.error);
+                        title = result.article.title;
+                        textContent = result.article.textContent;
+                    } else if (contentType.includes('application/pdf')) {
+                        const pdfBuffer = await response.arrayBuffer();
+                        const pdfDataUrl = arrayBufferToDataUrl(pdfBuffer);
+                        const result = await chrome.runtime.sendMessage({ action: 'parsePdf', target: 'offscreen', pdfDataUrl: pdfDataUrl });
+                        if (!result.success) throw new Error(result.error);
+                        title = new URL(url).pathname.split('/').pop() || 'Untitled PDF';
+                        textContent = result.textContent;
+                    } else { // EPUB
+                        const epubData = await response.arrayBuffer();
+                        const result = await chrome.runtime.sendMessage({ action: 'parseEpub', target: 'offscreen', epubData: epubData });
+                        if (!result.success) throw new Error(result.error);
+                        title = result.title || new URL(url).pathname.split('/').pop() || 'Untitled EPUB';
+                        textContent = result.textContent;
+                    }
                 } else {
-                    const rawText = await response.text();
+                    // Plain text
+                    textContent = await response.text();
                     title = new URL(url).pathname.split('/').pop() || 'Untitled Text';
-                    textContent = rawText;
                 }
 
                 const addedBook = await processAndSaveBook(title, textContent, url);
@@ -232,68 +248,51 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             } catch (error) {
                 console.error('[Kuato] Failed to load URL:', error);
                 sendResponse({ success: false, error: error.message });
+            } finally {
+                if (needsOffscreen) {
+                    await closeOffscreenDocument();
+                }
             }
         })();
-        return true; // Indicates asynchronous response
+        return true;
     }
 
     if (request.action === 'loadFile') {
         const { filename, encoding, content } = request;
         (async () => {
+            let needsOffscreen = false;
             try {
                 let title, textContent;
-
+                const isPdf = filename.toLowerCase().endsWith('.pdf');
+                const isHtml = filename.toLowerCase().endsWith('.html') || filename.toLowerCase().endsWith('.htm');
                 const isEpub = filename.toLowerCase().endsWith('.epub');
 
-                if (isEpub) {
-                    const response = await fetch(content);
-                    const epubData = await response.arrayBuffer();
+                if (isPdf || isHtml || isEpub) {
+                    needsOffscreen = true;
+                    await setupOffscreenDocument();
 
-                    await setupOffscreenDocument('offscreen.html');
-                    const result = await chrome.runtime.sendMessage({
-                        action: 'parseEpub',
-                        target: 'offscreen',
-                        epubData: epubData
-                    });
-
-                    if (!result.success) throw new Error(result.error);
-                    title = result.title || filename;
-                    textContent = result.textContent;
-                }
-                else if (encoding === 'dataURL') {
-                    // It's a PDF file
-                    const response = await fetch(content);
-                    const pdfData = await response.arrayBuffer();
-
-                    await setupOffscreenDocument('offscreen.html');
-                    const result = await chrome.runtime.sendMessage({
-                        action: 'parsePdf',
-                        target: 'offscreen',
-                        pdfData: pdfData
-                    });
-
-                    if (!result.success) throw new Error(result.error);
-                    title = filename;
-                    textContent = result.textContent;
-
-                } else {
-                    // It's a text-based file (HTML or TXT)
-                    const isHtml = filename.toLowerCase().endsWith('.html') || filename.toLowerCase().endsWith('.htm');
-                    if (isHtml) {
-                        await setupOffscreenDocument('offscreen.html');
-                        const result = await chrome.runtime.sendMessage({
-                            action: 'parseHtml',
-                            target: 'offscreen',
-                            html: content
-                        });
-
+                    if (isPdf) {
+                        const result = await chrome.runtime.sendMessage({ action: 'parsePdf', target: 'offscreen', pdfDataUrl: content });
+                        if (!result.success) throw new Error(result.error);
+                        title = filename;
+                        textContent = result.textContent;
+                    } else if (isHtml) {
+                        const result = await chrome.runtime.sendMessage({ action: 'parseHtml', target: 'offscreen', html: content });
                         if (!result.success) throw new Error(result.error);
                         title = result.article.title || filename;
                         textContent = result.article.textContent;
-                    } else {
-                        title = filename;
-                        textContent = content;
+                    } else { // EPUB
+                        const response = await fetch(content);
+                        const epubData = await response.arrayBuffer();
+                        const result = await chrome.runtime.sendMessage({ action: 'parseEpub', target: 'offscreen', epubData: epubData });
+                        if (!result.success) throw new Error(result.error);
+                        title = result.title || filename;
+                        textContent = result.textContent;
                     }
+                } else {
+                    // Plain text
+                    title = filename;
+                    textContent = content;
                 }
 
                 const addedBook = await processAndSaveBook(title, textContent, `file://${filename}`);
@@ -302,12 +301,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             } catch (error) {
                 console.error('[Kuato] Failed to load file:', error);
                 sendResponse({ success: false, error: error.message });
+            } finally {
+                if (needsOffscreen) {
+                    await closeOffscreenDocument();
+                }
             }
         })();
-        return true; // Indicates asynchronous response
+        return true;
     }
     
-    // Keep other message handlers
+    // Keep other message handlers...
     if (request.action === 'getLibrary') {
         getLibrary().then(library => sendResponse({ success: true, library }));
         return true;
@@ -329,22 +332,48 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
     if (request.action === 'uploadToPastebin') {
-        const formData = new FormData();
-        formData.append('c', request.content);
-        fetch('https://fars.ee/?u=1', { method: 'POST', body: formData })
-            .then(response => response.text())
-            .then(url => {
+        (async () => {
+            try {
+                const settings = await getSettings();
+                const service = settings.pastebinService || 'fars.ee';
+                let url;
+
+                if (service === 'dpaste.org') {
+                    const formData = new FormData();
+                    formData.append('content', request.content);
+                    formData.append('format', 'url'); // Ask for the URL directly
+                    const response = await fetch('https://dpaste.org/api/', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (!response.ok) {
+                        throw new Error(`dpaste.org API error: ${response.status} ${await response.text()}`);
+                    }
+                    url = await response.text();
+                } else { // Default to fars.ee
+                    const formData = new FormData();
+                    formData.append('c', request.content);
+                    const response = await fetch('https://fars.ee/?u=1', {
+                        method: 'POST',
+                        body: formData
+                    });
+                     if (!response.ok) {
+                        throw new Error(`fars.ee API error: ${response.status} ${await response.text()}`);
+                    }
+                    url = await response.text();
+                }
+
                 const trimmedUrl = url.trim();
                 if (trimmedUrl.startsWith('http')) {
                     sendResponse({ success: true, url: trimmedUrl });
                 } else {
-                    throw new Error(`Invalid response from pastebin: ${trimmedUrl}`);
+                    throw new Error(`Invalid response from ${service}: ${trimmedUrl}`);
                 }
-            })
-            .catch(error => {
-                console.error('Error uploading to pastebin:', error);
+            } catch (error) {
+                console.error(`Error uploading to pastebin (${(await getSettings()).pastebinService}):`, error);
                 sendResponse({ success: false, error: error.message });
-            });
+            }
+        })();
         return true;
     }
 });

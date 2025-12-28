@@ -119,8 +119,9 @@ function createSettingsModal() {
             </div>
             <div class="kuato-setting">
                 <label for="kuato-setting-pastebin">Pastebin Service:</label>
-                <select id="kuato-setting-pastebin" disabled>
-                    <option>fars.ee</option>
+                <select id="kuato-setting-pastebin">
+                    <option value="fars.ee">fars.ee</option>
+                    <option value="dpaste.org">dpaste.org</option>
                 </select>
             </div>
             <div class="kuato-setting">
@@ -297,6 +298,7 @@ function initializeKuato() {
 
     openSettingsButton.addEventListener('click', () => {
         document.getElementById('kuato-setting-chunk-size').value = kuatoSettings.chunkSize;
+        document.getElementById('kuato-setting-pastebin').value = kuatoSettings.pastebinService;
         document.getElementById('kuato-setting-message-format').value = kuatoSettings.messageFormat;
         settingsModal.style.display = 'flex';
     });
@@ -308,6 +310,7 @@ function initializeKuato() {
     saveSettingsButton.addEventListener('click', () => {
         const newSettings = {
             chunkSize: parseInt(document.getElementById('kuato-setting-chunk-size').value, 10),
+            pastebinService: document.getElementById('kuato-setting-pastebin').value,
             messageFormat: document.getElementById('kuato-setting-message-format').value
         };
 
