@@ -38,9 +38,18 @@ async function handleMessages(request, sender, sendResponse) {
   }
 
   if (request.action === 'parsePdf') {
-    const { pdfData } = request;
+    const { pdfDataUrl } = request;
     (async () => {
         try {
+            // Decode the base64 data URL here, right before it's used.
+            const base64Data = pdfDataUrl.split(',')[1];
+            const binaryStr = atob(base64Data);
+            const len = binaryStr.length;
+            const pdfData = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                pdfData[i] = binaryStr.charCodeAt(i);
+            }
+
             const { pdfjsLib } = globalThis;
             pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdfjs/pdf.worker.mjs');
 
@@ -96,3 +105,6 @@ async function handleMessages(request, sender, sendResponse) {
 
   return false;
 }
+
+// Signal to the background script that the offscreen document is ready.
+chrome.runtime.sendMessage({ action: 'offscreenReady' });
